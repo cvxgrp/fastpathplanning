@@ -66,17 +66,21 @@ class BoxCollection:
         self.n = len(boxes)
         self.d = boxes[0].d
 
-        self.ls = np.array([box.l for box in boxes]).T
-        self.us = np.array([box.u for box in boxes]).T
-        self.orders = np.zeros((self.d, 2, self.n), dtype=int)
-        self.orders_inv = np.zeros((self.d, 2, self.n), dtype=int)
+        self.ls = np.vstack([box.l for box in boxes]).T
+        self.us = np.vstack([box.u for box in boxes]).T
+        self.orders = np.empty((self.d, 2, self.n), dtype=int)
+        self.orders_inv = np.empty((self.d, 2, self.n), dtype=int)
 
-        sort = lambda values: zip(*sorted(zip(values, range(self.n))))
+        def sort_coordinates_construct_forward_backwards(vals, order, order_inv):
+            order[:] = np.argsort(vals)
+            order_inv[order] = np.arange(self.n)
+            vals[:] = vals[order]
+
         for i in range(self.d):
-            self.ls[i], self.orders[i, 0] = sort(self.ls[i])
-            self.us[i], self.orders[i, 1] = sort(self.us[i])
-            self.orders_inv[i, 0] = np.argsort(self.orders[i, 0])
-            self.orders_inv[i, 1] = np.argsort(self.orders[i, 1])
+            sort_coordinates_construct_forward_backwards(
+                    self.ls[i], self.orders[i, 0], self.orders_inv[i, 0])
+            sort_coordinates_construct_forward_backwards(
+                    self.us[i], self.orders[i, 1], self.orders_inv[i, 1])
 
         self._inters = None
 
