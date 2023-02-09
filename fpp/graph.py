@@ -37,8 +37,6 @@ class LineGraph(nx.Graph):
             self.points_in_centers()
         elif points == 'optimize':
             self.optimize_points()
-        elif points == 'weiszfeld':
-            self.weiszfeld_points()
         else:
             raise ValueError
 
@@ -56,64 +54,23 @@ class LineGraph(nx.Graph):
         for v in self.nodes:
             self.nodes[v]['point'] = self.nodes[v]['box'].c
 
-    def optimize_points(self):
+    def optimize_points(self, **kwargs):
 
-        x = {}
-        constraints = []
-        for v in self.nodes:
-            box = self.nodes[v]['box']
-            x[v] = cp.Variable(box.d)
-            constraints.append(x[v] >= box.l)
-            constraints.append(x[v] <= box.u)
-        cost = sum(cp.norm(x[e[1]] - x[e[0]], 2) for e in self.edges)
+        x = cp.Variable((self.number_of_nodes(), self.B.d))
+
+        l = np.vstack([self.nodes[v]['box'].l for v in self.nodes])
+        u = np.vstack([self.nodes[v]['box'].u for v in self.nodes])
+        constraints = [x >= l, x <= u]
+
+        A = nx.incidence_matrix(self, oriented=True)
+        y = A.T.dot(x)
+        cost = cp.sum(cp.norm(y, 2, axis=1))
 
         prob = cp.Problem(cp.Minimize(cost), constraints)
-        prob.solve(solver='ECOS')
-
-        for v in self.nodes:
-            self.nodes[v]['point'] = x[v].value
-
-    def weiszfeld_points(self, reps=1e-3, rtol=1e-3, max_iter=50, iter_gap=3):
-        '''TODO: improve the following as in "The multivariate L1-median and
-        associated data depth."'''
-
-        P = np.array([self.nodes[v]['box'].c for v in self.nodes])
-        L = np.array([self.nodes[v]['box'].l for v in self.nodes])
-        U = np.array([self.nodes[v]['box'].u for v in self.nodes])
-
-        def evaluate(P):
-            gaps = [P[self.v2i[e[1]]] - P[self.v2i[e[0]]] for e in self.edges]
-            distances = np.linalg.norm(gaps, axis=1)
-            return sum(distances)
-        def project(P):
-            return np.minimum(np.maximum(P, L), U)
-        eps = evaluate(P) / P.shape[0] * reps
-        def smooth_norm(x):
-            return (x.dot(x) + eps) ** .5
-        adj = {u: [self.v2i[v] for v in self.adj[u]] for u in self.nodes}
-        def update(P):
-            Q = np.zeros(P.shape)
-            for i, u in enumerate(self.nodes):
-                if len(adj[u]) > 0:
-                    neighbors = np.array([P[j] for j in adj[u]])
-                    Pi = P[i]
-                    distances = np.array([smooth_norm(Pi - Pj) for Pj in neighbors])
-                    num = sum((neighbors.T / distances).T)
-                    den = sum(1 / distances)
-                    Q[i] = num / den
-            return Q
-        
-        cost = evaluate(P)
-        for k in range(max_iter):
-            P = project(update(P))
-            if k % iter_gap == 0:
-                new_cost = evaluate(P)
-                if new_cost > cost * (1 - rtol):
-                    break
-                cost = new_cost
+        prob.solve(**kwargs)
 
         for i, v in enumerate(self.nodes):
-            self.nodes[v]['point'] = P[i]
+            self.nodes[v]['point'] = x[i].value
 
     @staticmethod
     def node(k, l):
@@ -169,52 +126,6 @@ class LineGraph(nx.Graph):
                     first_vertex = i
 
         box_sequence = self._succ_to_box_sequence(succ, first_box, first_vertex)
-
-        return box_sequence, length, time() - tic
-
-    def all_pairs_shortest_path(self):
-
-        tic = time()
-
-        dist, succ = sp.sparse.csgraph.floyd_warshall(
-            csgraph=self.adj_mat,
-            directed=False,
-            return_predecessors=True
-        )
-        planner = lambda start, goal: self._planner_all_pairs(start, goal, dist, succ)
-
-        runtime = time() - tic
-
-        return planner, runtime
-
-    def _planner_all_pairs(self, start, goal, dist, succ):
-
-        tic = time()
-
-        length = np.inf
-        for k in self.B.contain(start):
-            for l in self.B.inters[k]:
-                for p in self.B.contain(goal):
-                    for q in self.B.inters[p]:
-                        u = self.node(k, l)
-                        v = self.node(p, q)
-                        i = self.v2i[u]
-                        j = self.v2i[v]
-                        dist_uv = dist[i, j]
-                        if np.isinf(dist_uv):
-                            return None, None, time() - tic
-                        dist_su = np.linalg.norm(self.nodes[u]['point'] - start)
-                        dist_vg = np.linalg.norm(self.nodes[v]['point'] - goal)
-                        dist_sg = dist_su + dist_uv + dist_vg
-                        if dist_sg < length:
-                            length = dist_sg
-                            first_box = k
-                            last_box = p
-                            first_vertex = i
-                            last_vertex = j
-
-        box_sequence = self._succ_to_box_sequence(succ[last_vertex], first_box, first_vertex)
-        box_sequence.append(last_box)
 
         return box_sequence, length, time() - tic
 
