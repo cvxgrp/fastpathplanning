@@ -73,9 +73,15 @@ def optimal_control(B, prob, var, par, constr, safety_seq, verbose, tol, **kwarg
             print(f'Cost: {prob.value}')
             print(f'Solver time: {prob.solver_stats.solve_time}')
 
+        # Find where Lagrange multipliers are nonzero.
+        mul_l = constr['l'].dual_value
+        mul_u = constr['u'].dual_value
+        # Line below uses mul_l >= 0 and mul_u >= 0.
+        mul_norm = np.linalg.norm(mul_l + mul_u, axis=1)
+
         # Improve path.
         improvement = False
-        for i in range(1, N):
+        for i in np.where(mul_norm > tol)[0]:
 
             # Stabbing problem.
             k_prev, k0, k_next = safety_seq[i - 1:i + 2]
@@ -89,13 +95,8 @@ def optimal_control(B, prob, var, par, constr, safety_seq, verbose, tol, **kwarg
                 dl = np.vstack([B.boxes[k].l - box0.l for k in other_boxes])
                 du = np.vstack([box0.u - B.boxes[k].u for k in other_boxes])
 
-                # Lagrange multipliers.
-                mul_l = constr['l'].dual_value[i]
-                mul_u = constr['u'].dual_value[i]
-                assert np.isclose(min(min(mul_l), min(mul_u)), 0)
-
                 # Pick the box with the lowest cost drop.
-                cost_drops = dl.dot(mul_l) + du.dot(mul_u)
+                cost_drops = dl.dot(mul_l[i]) + du.dot(mul_u[i])
                 kk = cost_drops.argmin()
                 cost_drop = cost_drops[kk]
 
