@@ -39,6 +39,14 @@ class Box:
 
         return all(x - self.l >= - tol) and all(x - self.u <= tol)
 
+    def active_set(self, x, tol=1e-9):
+
+        # Assumes that the box contains x.
+        L = x <= self.l + tol
+        U = x >= self.u - tol
+        
+        return L, U
+
     def plot2d(self, label=None, **kwargs):
 
         import matplotlib.pyplot as plt
