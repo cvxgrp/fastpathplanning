@@ -38,20 +38,41 @@ class Bezier:
 
         return sum(f(p) for p in self.points) * self.duration / (self.n + 1)
     
-    def plot2d(self, m=51, **kwargs):
+    def plot(self, m=51, **kwargs):
         import matplotlib.pyplot as plt
+
+        if self.points.shape[1] != 2:
+            raise NotImplementedError
 
         options = {'c':'b'}
         options.update(kwargs)
         t = np.linspace(0, self.duration, m)
         plt.plot(*self.evaluate(t).T, **options)
 
-    def scatter2d(self, **kwargs):
+    def scatter(self, **kwargs):
         import matplotlib.pyplot as plt
+
+        if self.points.shape[1] != 2:
+            raise NotImplementedError
 
         options = {'fc':'orange', 'ec':'k', 'zorder':3}
         options.update(kwargs)
         plt.scatter(*self.points.T, **options)
+
+    def plot_control_polytope(self, **kwargs):
+        import matplotlib.pyplot as plt
+        from matplotlib.patches import Polygon
+        from scipy.spatial import ConvexHull
+
+        if self.points.shape[1] != 2:
+            raise NotImplementedError
+
+        options = {'fc':'lightcoral'}
+        options.update(kwargs)
+        hull = ConvexHull(self.points)
+        ordered_points = hull.points[hull.vertices]
+        poly = Polygon(ordered_points, **options)
+        plt.gca().add_patch(poly)
 
 
 class BezierTrajectory:
@@ -77,17 +98,21 @@ class BezierTrajectory:
 
         return BezierTrajectory([b.derivative() for b in self.beziers])
 
-    def plot2d(self, **kwargs):
-        import matplotlib.pyplot as plt
+    def plot(self, **kwargs):
 
         for bezier in self.beziers:
-            bezier.plot2d(**kwargs)
+            bezier.plot(**kwargs)
 
-    def scatter2d(self, **kwargs):
-        import matplotlib.pyplot as plt
+    def scatter(self, **kwargs):
 
         for bezier in self.beziers:
-            bezier.scatter2d(**kwargs)
+            bezier.scatter(**kwargs)
+
+    def plot_control_polytopes(self, **kwargs):
+
+        for bezier in self.beziers:
+            bezier.plot_control_polytope(**kwargs)
+
 
 def optimize_bezier(l, u, h, lam, initial, final, n_derivatives=None, **kwargs):
 
