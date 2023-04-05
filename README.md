@@ -1,5 +1,4 @@
-# fpp.py
-TO BE RENAMED
+# fastpathplanning
 
  - Precompute library: takes as input the boxes
     - Depends on cvxpy, networkx, scipy, numpy
