@@ -8,7 +8,7 @@ from itertools import product
 
 class LineGraph(nx.Graph):
 
-    def __init__(self, B, points, *args, **kwargs):
+    def __init__(self, B, *args, **kwargs):
 
         # Initialize and store boxes.
         super().__init__(*args, **kwargs)
@@ -33,12 +33,7 @@ class LineGraph(nx.Graph):
             self.nodes[v]['box'] = boxk.intersect(boxl)
 
         # Place representative point in each box intersection.
-        if points == 'centers':
-            self.points_in_centers()
-        elif points == 'optimize':
-            self.optimize_points()
-        else:
-            raise ValueError
+        self.optimize_points()
 
         # Assign fixed length to each edge of the line graph.
         for e in self.edges:
@@ -49,14 +44,12 @@ class LineGraph(nx.Graph):
         # Store adjacency matrix for scipy's shortest-path algorithms.
         self.adj_mat = nx.to_scipy_sparse_array(self)
         
-    def points_in_centers(self):
+    def optimize_points(self, squared=False, verbose=False):
 
-        for v in self.nodes:
-            self.nodes[v]['point'] = self.nodes[v]['box'].c
-
-    def optimize_points(self, **kwargs):
+        tic = time()
 
         x = cp.Variable((self.number_of_nodes(), self.B.d))
+        x.value = np.array([self.nodes[v]['box'].c for v in self.nodes])
 
         l = np.vstack([self.nodes[v]['box'].l for v in self.nodes])
         u = np.vstack([self.nodes[v]['box'].u for v in self.nodes])
@@ -64,10 +57,19 @@ class LineGraph(nx.Graph):
 
         A = nx.incidence_matrix(self, oriented=True)
         y = A.T.dot(x)
-        cost = cp.sum(cp.norm(y, 2, axis=1))
+        if squared:
+            I = sp.sparse.identity(np.product(y.shape))
+            cost = cp.quad_form(y.flatten(), I)
+        else:
+            cost = cp.sum(cp.norm(y, 2, axis=1))
 
         prob = cp.Problem(cp.Minimize(cost), constraints)
-        prob.solve(**kwargs)
+        prob.solve(solver='CLARABEL',
+            tol_gap_abs=1e-4, tol_gap_rel=1e-4, tol_feas=1e-4) # Clarabel.
+        # feastol=1e-4, reltol=1e-4, abstol=1e-4) # Ecos.
+        # prob.solve(solver='MOSEK')
+
+        self.cvxpy_time = (time() - tic) - prob.solver_stats.solve_time
 
         for i, v in enumerate(self.nodes):
             self.nodes[v]['point'] = x[i].value
@@ -152,17 +154,22 @@ class LineGraph(nx.Graph):
         return box_sequence
 
     def plot(self, **kwargs):
-        import matplotlib.pyplot as plt
 
-        options = {'marker':'o', 'markerfacecolor':'w', 'markeredgecolor':'k', 'c':'k'}
-        options.update(kwargs)
+        plot_graph(self, **kwargs)
 
-        if 'label' in options:
-            plt.plot([np.nan], [np.nan], **options)
-            options.pop('label')
+def plot_graph(G, **kwargs):
 
-        for e in self.edges:
-            start = self.nodes[e[0]]['point']
-            stop = self.nodes[e[1]]['point']
-            P = np.array([start, stop])
-            plt.plot(*P.T, **options)
+    import matplotlib.pyplot as plt
+
+    options = {'marker':'o', 'markerfacecolor':'w', 'markeredgecolor':'k', 'c':'k'}
+    options.update(kwargs)
+
+    if 'label' in options:
+        plt.plot([np.nan], [np.nan], **options)
+        options.pop('label')
+
+    for e in G.edges:
+        start = G.nodes[e[0]]['point']
+        stop = G.nodes[e[1]]['point']
+        P = np.array([start, stop])
+        plt.plot(*P.T, **options)

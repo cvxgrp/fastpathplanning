@@ -1,6 +1,5 @@
 import numpy as np
 import cvxpy as cp
-import matplotlib.pyplot as plt
 
 from time import time
 from itertools import accumulate
@@ -86,11 +85,12 @@ def iterative_planner(prob, x, p, B, box_seq, tol=1e-5, **kwargs):
 
     box_seq = np.array(box_seq)
     solver_time = 0
+    n_iters = 0
     while True:
+        n_iters += 1
 
         box_seq = jump_box_repetitions(box_seq)
         traj, length, solver_time_i = solve_min_distance(prob, x, p, B, box_seq, **kwargs)
-        print(length)
         solver_time += solver_time_i
         box_seq, traj = merge_overlaps(box_seq, traj, tol)
         # box_seq, traj = remove_redundant_boxes(B, box_seq, traj, tol)
@@ -127,7 +127,7 @@ def iterative_planner(prob, x, p, B, box_seq, tol=1e-5, **kwargs):
         if len(insert_k) > 0:
             box_seq = np.insert(box_seq, insert_k, insert_i)
         else:
-            return list(box_seq), traj, length, solver_time
+            return list(box_seq), traj, length, n_iters, solver_time
 
 def merge_overlaps(box_seq, traj, tol):
 

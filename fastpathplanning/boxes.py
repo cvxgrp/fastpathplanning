@@ -15,25 +15,19 @@ class Box:
         assert all(self.u >= self.l)
         self.c = (self.l + self.u) / 2
 
+    def intersects(self, box):
+
+        l = np.maximum(box.l, self.l)
+        u = np.minimum(box.u, self.u)
+
+        return all(u >= l)
+
     def intersect(self, box):
+
         l = np.maximum(box.l, self.l)
         u = np.minimum(box.u, self.u)
 
         return Box(l, u)
-
-    def constrain(self, x, tol=0):
-
-        eq = self.u <= self.l + tol
-        ineq = np.logical_not(eq)
-
-        constraints = []
-        if sum(eq) > 0:
-            constraints.append(x[eq] == self.l[eq])
-        if sum(ineq) > 0:
-            constraints.append(x[ineq] >= self.l[ineq])
-            constraints.append(x[ineq] <= self.u[ineq])
-
-        return constraints
 
     def contains(self, x, tol=0):
 
@@ -183,20 +177,6 @@ class BoxCollection:
         for i, box in enumerate(self.boxes):
             if subset is None or i in subset:
                 box.plot3d(vis, name + '_' + str(i), color, opacity)
-
-    @staticmethod
-    def generate_uniform(d, n, sides, seed=0):
-
-        np.random.seed(seed)
-        sides = copy(sides)
-        boxes = []
-        for _ in range(n):
-            c = np.random.rand(d)
-            np.random.shuffle(sides)
-            diag = np.multiply(np.random.rand(d), sides)
-            boxes.append(Box(c - diag, c + diag))
-            
-        return BoxCollection(boxes)
 
     @staticmethod
     def generate_grid(d, n, sides, seed=0):
