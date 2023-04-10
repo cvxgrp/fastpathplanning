@@ -1,1 +1,1 @@
-from boxes import BoxCollection, Box
+from fastpathplanning.boxes import BoxCollection, Box
