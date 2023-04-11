@@ -61,11 +61,14 @@ class Box:
 
 
 class BoxCollection:
-    def __init__(self, boxes):
+    def __init__(self, boxes, verbose=True, tol=0):
 
         self.boxes = boxes
         self.n = len(boxes)
         self.d = boxes[0].d
+
+        if verbose:
+            print(f'Computing interesctions of {self.n} boxes in {self.d} dimensions...')
 
         self.ls = np.vstack([box.l for box in boxes]).T
         self.us = np.vstack([box.u for box in boxes]).T
@@ -83,7 +86,14 @@ class BoxCollection:
             sort_coordinates_construct_forward_backwards(
                     self.us[i], self.orders[i, 1], self.orders_inv[i, 1])
 
-        self._inters = None
+        self.inters = self._iintersections(0, tol)
+        for i in range(1, self.d):
+            for k, box_indices in self._iintersections(i, tol).items():
+                self.inters[k] = self.inters[k] & box_indices
+
+        if verbose:
+            n_inters = int(sum(len(v) for v in self.inters.values()) / 2)
+            print(f'...found {n_inters} intersections.')
 
     def contain(self, x, tol=0, subset=...):
 
@@ -125,19 +135,6 @@ class BoxCollection:
 
         return box_indices_l & box_indices_u
 
-    @property
-    def inters(self, tol=0):
-
-        if self._inters is not None:
-            return self._inters
-
-        self._inters = self._iintersections(0, tol)
-        for i in range(1, self.d):
-            for k, box_indices in self._iintersections(i, tol).items():
-                self._inters[k] = self._inters[k] & box_indices
-            
-        return self._inters
-
     def _iintersections(self, i, tol=0):
         
         inters = {k: set() for k in range(self.n)}
@@ -149,9 +146,9 @@ class BoxCollection:
 
         return inters
 
-    def line_graph(self):
+    def line_graph(self, verbose=True):
 
-        return LineGraph(self)
+        return LineGraph(self, verbose)
 
     def plot2d(self, subset=None, label=None, frame_ratio=50, **kwargs):
         import matplotlib.pyplot as plt

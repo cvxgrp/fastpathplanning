@@ -1,1 +1,1 @@
-from fastpathplanning.boxes import BoxCollection, Box
+from fastpathplanning.fastpathplanning import SafeSet, plan

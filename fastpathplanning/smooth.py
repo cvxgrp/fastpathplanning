@@ -59,37 +59,28 @@ class BezierCurve:
 
         return p.dot(A.dot(p))
 
-    def plot(self, samples=51, **kwargs):
+    def plot2d(self, samples=51, **kwargs):
 
         import matplotlib.pyplot as plt
-
-        if self.d != 2:
-            raise NotImplementedError
 
         options = {'c':'b'}
         options.update(kwargs)
         t = np.linspace(self.a, self.b, samples)
         plt.plot(*self(t).T, **options)
 
-    def scatter(self, **kwargs):
+    def scatter2d(self, **kwargs):
 
         import matplotlib.pyplot as plt
-
-        if self.d != 2:
-            raise NotImplementedError
 
         options = {'fc':'orange', 'ec':'k', 'zorder':3}
         options.update(kwargs)
         plt.scatter(*self.points.T, **options)
 
-    def plot_polygon(self, **kwargs):
+    def plot_2dpolygon(self, **kwargs):
 
         import matplotlib.pyplot as plt
         from matplotlib.patches import Polygon
         from scipy.spatial import ConvexHull
-
-        if self.d != 2:
-            raise NotImplementedError
 
         options = {'fc':'lightcoral'}
         options.update(kwargs)
@@ -141,25 +132,20 @@ class CompositeBezierCurve:
 
         return sum(bez.bound_on_integral(f) for bez in self.beziers)
 
-    def plot(self, **kwargs):
-
-        import matplotlib.pyplot as plt
-
-        if self.d != 2:
-            raise NotImplementedError
+    def plot2d(self, **kwargs):
 
         for bez in self.beziers:
-            bez.plot(**kwargs)
+            bez.plot2d(**kwargs)
 
-    def scatter(self, **kwargs):
-
-        import matplotlib.pyplot as plt
-
-        if self.d != 2:
-            raise NotImplementedError
+    def scatter2d(self, **kwargs):
 
         for bez in self.beziers:
-            bez.scatter(**kwargs)
+            bez.scatter2d(**kwargs)
+
+    def plot_2dpolygon(self, **kwargs):
+
+        for bez in self.beziers:
+            bez.plot_2dpolygon(**kwargs)
 
 def optimize_bezier(L, U, durations, alpha, initial, final,
     n_points=None, points_warm_start=None, **kwargs):
@@ -224,9 +210,7 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
 
     # Solve problem.
     prob = cp.Problem(cp.Minimize(cost), constraints)
-    prob.solve(solver='CLARABEL',
-        tol_gap_abs=1e-4, tol_gap_rel=1e-4, tol_feas=1e-4) # Clarabel.
-        # feastol=1e-4, reltol=1e-4, abstol=1e-4) # Ecos.
+    prob.solve(solver='CLARABEL')
 
     # Reconstruct trajectory.
     beziers = []
@@ -284,10 +268,7 @@ def retiming(kappa, costs, durations, **kwargs):
         
     # Solve SOCP and get new durarations.
     prob = cp.Problem(cp.Minimize(cost), constr)
-    prob.solve(solver='CLARABEL',
-        tol_gap_abs=1e-4, tol_gap_rel=1e-4, tol_feas=1e-4) # Clarabel.
-    # prob.solve(solver='ECOS',
-    #     feastol=1e-4, reltol=1e-4, abstol=1e-4) # ECOS.
+    prob.solve(solver='CLARABEL')
     new_durations = np.multiply(eta.value, durations)
 
     # New candidate for kappa.
@@ -306,7 +287,7 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
     warm_start = sol_stats['warm_start']
 
     if verbose:
-        print(f'Iter. 0, cost {np.round(cost, 3)}')
+        print(f'Iter. 0: cost {np.round(cost, 3)}.')
 
     # Lists to populate.
     costs = [cost]
@@ -338,7 +319,7 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
         paths.append(path_new)
         bez_runtimes.append(sol_stats['runtime'])
         if verbose:
-            print(f'Iter. {i}, cost {np.round(cost_new, 3)}, kappa {kappa}')
+            print(f'Iter. {i}, cost {np.round(cost_new, 3)}, kappa {kappa}.')
 
         # If retiming improved the trajectory.
         if cost_new < cost:
@@ -355,9 +336,9 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
 
     runtime = sum(bez_runtimes) + sum(retiming_runtimes)
     if verbose:
-        print(f'\nTerminated in {i} iterations.')
-        print(f'Final cost is {cost}.')
-        print(f'Solver time was {runtime}.')
+        print(f'Terminated in {i} iterations.')
+        print(f'Final cost is {np.round(cost, 3)}.')
+        print(f'Solver time was {np.round(runtime, 5)}.')
 
     # Solution statistics.
     sol_stats = {}

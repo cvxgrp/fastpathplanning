@@ -5,81 +5,27 @@ from itertools import accumulate
 from bisect import bisect
 from scipy.special import binom
 
+def solve_min_distance(B, box_seq, start, goal):
 
-def build_min_distance(B, max_boxes, improve_box_seq=False, **kwargs):
+    x = cp.Variable((len(box_seq) + 1, B.d))
 
-    # Variables and parameters.
-    x = cp.Variable((max_boxes + 1, B.d))
-    start = cp.Parameter(B.d)
-    goal = cp.Parameter(B.d)
-    l = cp.Parameter((max_boxes - 1, B.d))
-    u = cp.Parameter((max_boxes - 1, B.d))
-    # Lower and upper limits for the box intersections. (This is why these
-    # matrices have max_boxes - 1 rows.)
+    boxes = [B.boxes[i] for i in box_seq]
+    l = np.array([np.maximum(b.l, c.l) for b, c in zip(boxes[:-1], boxes[1:])])
+    u = np.array([np.minimum(b.u, c.u) for b, c in zip(boxes[:-1], boxes[1:])])
 
-    cost = cp.sum([cp.norm(x[i + 1] - x[i], 2) for i in range(max_boxes)])
+    cost = cp.sum(cp.norm(x[1:] - x[:-1], 2, axis=1))
     constr = [x[0] == start, x[1:-1] >= l, x[1:-1] <= u, x[-1] == goal]
 
     prob = cp.Problem(cp.Minimize(cost), constr)
-    p = {'start': start, 'goal': goal, 'l': l, 'u': u}
-    solve_dummy_instance(prob, p, **kwargs)
+    prob.solve(solver='CLARABEL')
 
-    def planner(box_seq, start, goal):
-
-        tic = time()
-        p['start'].value = start
-        p['goal'].value = goal
-
-        if improve_box_seq:
-            sol = iterative_planner(prob, x, p, B, box_seq, **kwargs)
-        else:
-            sol = solve_min_distance(prob, x, p, B, box_seq, **kwargs)
-
-        runtime = time() - tic
-        return *sol, runtime
-
-    return planner
-
-
-def solve_dummy_instance(prob, p, **kwargs):
-
-    for pi in p.values():
-        pi.value = np.zeros(pi.shape)
-    prob.solve(**kwargs)
-
-
-def solve_min_distance(prob, x, p, B, box_seq, **kwargs):
-
-    max_boxes = x.shape[0] - 1
-    goal = p['goal'].value
-    l, u = intersection_bounds(B, box_seq, max_boxes, goal)
-    p['l'].value = l
-    p['u'].value = u
-
-    prob.solve(**kwargs)
     length = prob.value
-    traj = x.value[:len(box_seq) + 1]
+    traj = x.value
     solver_time = prob.solver_stats.solve_time
 
     return traj, length, solver_time
 
-
-def intersection_bounds(B, box_seq, max_boxes, goal):
-
-    boxes = [B.boxes[i] for i in box_seq]
-
-    l0 = np.array([np.maximum(b.l, c.l) for b, c in zip(boxes[:-1], boxes[1:])])
-    u0 = np.array([np.minimum(b.u, c.u) for b, c in zip(boxes[:-1], boxes[1:])])
-
-    l1 = np.full((max_boxes - l0.shape[0] - 1, B.d), goal)
-    u1 = np.full((max_boxes - u0.shape[0] - 1, B.d), goal)
-
-    l = np.vstack((l0, l1))
-    u = np.vstack((u0, u1))
-
-    return l, u
-
-def iterative_planner(prob, x, p, B, box_seq, tol=1e-5, **kwargs):
+def iterative_planner(B, start, goal, box_seq, verbose=True, tol=1e-5, **kwargs):
 
     box_seq = np.array(box_seq)
     solver_time = 0
@@ -88,10 +34,14 @@ def iterative_planner(prob, x, p, B, box_seq, tol=1e-5, **kwargs):
         n_iters += 1
 
         box_seq = jump_box_repetitions(box_seq)
-        traj, length, solver_time_i = solve_min_distance(prob, x, p, B, box_seq, **kwargs)
+        traj, length, solver_time_i = solve_min_distance(B, box_seq, start, goal, **kwargs)
         solver_time += solver_time_i
+
+        if verbose:
+            print(f'Iter. {n_iters}: curve length {np.round(length, 3)}, '\
+                  f'number of boxes {len(box_seq)}.')
+
         box_seq, traj = merge_overlaps(box_seq, traj, tol)
-        # box_seq, traj = remove_redundant_boxes(B, box_seq, traj, tol)
 
         kinks = find_kinks(traj, tol)
 
@@ -125,7 +75,11 @@ def iterative_planner(prob, x, p, B, box_seq, tol=1e-5, **kwargs):
         if len(insert_k) > 0:
             box_seq = np.insert(box_seq, insert_k, insert_i)
         else:
-            return list(box_seq), traj, length, n_iters, solver_time
+            if verbose:
+                print(f'Terminated in {n_iters} iterations.')
+                print(f'Final length is {np.round(length, 3)}.')
+                print(f'Solver time was {np.round(solver_time, 5)}.')
+            return list(box_seq), traj, length, solver_time
 
 def merge_overlaps(box_seq, traj, tol):
 

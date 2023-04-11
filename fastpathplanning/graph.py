@@ -7,7 +7,10 @@ from itertools import product
 
 class LineGraph(nx.Graph):
 
-    def __init__(self, B, *args, **kwargs):
+    def __init__(self, B, verbose=True, *args, **kwargs):
+
+        if verbose:
+            print('Computing line graph...')
 
         # Initialize and store boxes.
         super().__init__(*args, **kwargs)
@@ -42,10 +45,12 @@ class LineGraph(nx.Graph):
 
         # Store adjacency matrix for scipy's shortest-path algorithms.
         self.adj_mat = nx.to_scipy_sparse_array(self)
-        
-    def optimize_points(self, squared=False, verbose=False):
 
-        tic = time()
+        if verbose:
+            print(f'...line graph has {self.number_of_nodes()} vertices ' \
+                f'and {self.number_of_edges()} edges.')
+        
+    def optimize_points(self):
 
         x = cp.Variable((self.number_of_nodes(), self.B.d))
         x.value = np.array([self.nodes[v]['box'].c for v in self.nodes])
@@ -56,19 +61,10 @@ class LineGraph(nx.Graph):
 
         A = nx.incidence_matrix(self, oriented=True)
         y = A.T.dot(x)
-        if squared:
-            I = sp.sparse.identity(np.product(y.shape))
-            cost = cp.quad_form(y.flatten(), I)
-        else:
-            cost = cp.sum(cp.norm(y, 2, axis=1))
+        cost = cp.sum(cp.norm(y, 2, axis=1))
 
         prob = cp.Problem(cp.Minimize(cost), constraints)
-        prob.solve(solver='CLARABEL',
-            tol_gap_abs=1e-4, tol_gap_rel=1e-4, tol_feas=1e-4) # Clarabel.
-        # feastol=1e-4, reltol=1e-4, abstol=1e-4) # Ecos.
-        # prob.solve(solver='MOSEK')
-
-        self.cvxpy_time = (time() - tic) - prob.solver_stats.solve_time
+        prob.solve(solver='CLARABEL')
 
         for i, v in enumerate(self.nodes):
             self.nodes[v]['point'] = x[i].value
