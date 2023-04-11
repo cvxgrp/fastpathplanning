@@ -28,6 +28,13 @@ class LineGraph(nx.Graph):
         self.v2i = {v: i for i, v in enumerate(self.nodes)}
         self.i2v = {i: v for i, v in enumerate(self.nodes)}
 
+        if verbose:
+            print(f'...line graph has {self.number_of_nodes()} vertices ' \
+                f'and {self.number_of_edges()} edges.')
+
+        if verbose:
+            print('Optimizing representative points...')
+
         # Pair each vertex with the corresponding box intersection.
         for v in self.nodes:
             boxk = B.boxes[v[0]]
@@ -47,8 +54,7 @@ class LineGraph(nx.Graph):
         self.adj_mat = nx.to_scipy_sparse_array(self)
 
         if verbose:
-            print(f'...line graph has {self.number_of_nodes()} vertices ' \
-                f'and {self.number_of_edges()} edges.')
+            print('...representative points optimized.')
         
     def optimize_points(self):
 
