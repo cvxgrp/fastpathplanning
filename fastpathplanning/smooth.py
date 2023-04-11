@@ -148,7 +148,7 @@ class CompositeBezierCurve:
             bez.plot_2dpolygon(**kwargs)
 
 def optimize_bezier(L, U, durations, alpha, initial, final,
-    n_points=None, points_warm_start=None, **kwargs):
+    n_points=None, **kwargs):
 
     # Problem size.
     n_boxes, d = L.shape
@@ -165,8 +165,6 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
         for i in range(D + 1):
             size = (n_points - i, d)
             points[k][i] = cp.Variable(size)
-            if points_warm_start is not None:
-                points[k][i].value = points_warm_start[k][i]
 
     # Boundary conditions.
     constraints = []
@@ -236,12 +234,6 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
     sol_stats['cost'] = prob.value
     sol_stats['runtime'] = prob.solver_stats.solve_time
     sol_stats['cost_breakdown'] = cost_breakdown
-    warm_start = {}
-    for k in range(n_boxes):
-        warm_start[k] = {}
-        for i in range(D + 1):
-            warm_start[k][i] = points[k][i].value
-    sol_stats['warm_start'] = warm_start
 
     return path, sol_stats
 
@@ -284,7 +276,6 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
     path, sol_stats = optimize_bezier(L, U, durations, alpha, initial, final, **kwargs)
     cost = sol_stats['cost']
     cost_breakdown = sol_stats['cost_breakdown']
-    warm_start = sol_stats['warm_start']
 
     if verbose:
         print(f'Iter. 0: cost {np.round(cost, 3)}.')
@@ -311,10 +302,9 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
 
         # Improve Bezier curves.
         path_new, sol_stats = optimize_bezier(L, U, new_durations,
-            alpha, initial, final, warm_start=warm_start, **kwargs)
+            alpha, initial, final, **kwargs)
         cost_new = sol_stats['cost']
         cost_breakdown_new = sol_stats['cost_breakdown']
-        warm_start_new = sol_stats['warm_start']
         costs.append(cost_new)
         paths.append(path_new)
         bez_runtimes.append(sol_stats['runtime'])
@@ -327,7 +317,6 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
             path = path_new
             cost = cost_new
             cost_breakdown = cost_breakdown_new
-            warm_start = warm_start_new
 
         if kappa < kappa_min:
             break
