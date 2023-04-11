@@ -2,7 +2,6 @@ import numpy as np
 import scipy as sp
 import cvxpy as cp
 import networkx as nx
-
 from time import time
 from itertools import product
 

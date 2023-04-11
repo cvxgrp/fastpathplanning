@@ -1,9 +1,8 @@
 import numpy as np
 from copy import copy
 from itertools import product
-
 from bisect import bisect_left, bisect_right
-from graph import LineGraph
+from fastpathplanning.graph import LineGraph
 
 class Box:
 
@@ -150,9 +149,9 @@ class BoxCollection:
 
         return inters
 
-    def line_graph(self, points='centers'):
+    def line_graph(self):
 
-        return LineGraph(self, points)
+        return LineGraph(self)
 
     def plot2d(self, subset=None, label=None, frame_ratio=50, **kwargs):
         import matplotlib.pyplot as plt

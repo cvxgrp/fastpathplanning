@@ -1,6 +1,5 @@
 import numpy as np
 import cvxpy as cp
-
 from time import time
 from itertools import accumulate
 from bisect import bisect
