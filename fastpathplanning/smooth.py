@@ -175,7 +175,9 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
 
     # Loop through boxes.
     cost = 0
+    continuity = {}
     for k in range(n_boxes):
+        continuity[k] = {}
 
         # Box containment.
         Lk = np.array([L[k]] * n_points)
@@ -193,6 +195,8 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
         if k < n_boxes - 1:
             for i in range(D + 1):
                 constraints.append(points[k][i][-1] == points[k + 1][i][0])
+                if i > 0:
+                    continuity[k][i] = constraints[-1]
 
         # Cost function.
         for i, ai in alpha.items():
@@ -219,6 +223,14 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
         a = b
     path = CompositeBezierCurve(beziers)
 
+    retiming_weights = {}
+    for k in range(n_boxes - 1):
+        retiming_weights[k] = {}
+        for i in range(1, D + 1):
+            primal = points[k][i][-1].value
+            dual = continuity[k][i].dual_value
+            retiming_weights[k][i] = primal.dot(dual)
+
     # Reconstruct costs.
     cost_breakdown = {}
     for k in range(n_boxes):
@@ -234,11 +246,12 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
     sol_stats['cost'] = prob.value
     sol_stats['runtime'] = prob.solver_stats.solve_time
     sol_stats['cost_breakdown'] = cost_breakdown
+    sol_stats['retiming_weights'] = retiming_weights
 
     return path, sol_stats
 
 
-def retiming(kappa, costs, durations, **kwargs):
+def retiming(kappa, costs, durations, retiming_weights, **kwargs):
 
     # Decision variables.
     n_boxes = max(costs) + 1
@@ -250,8 +263,12 @@ def retiming(kappa, costs, durations, **kwargs):
     cost = 0
     for i, ci in costs.items():
         for j, cij in ci.items():
-            power = 2 * j - 1
-            cost += cij * cp.power(eta[i], - power)
+            cost += cij * cp.power(eta[i], 1 - 2 * j)
+
+    # Retiming weights.
+    for k in range(n_boxes - 1):
+        for i, w in retiming_weights[k].items():
+            cost -= retiming_weights[k][i] * i * (eta[k] - eta[k + 1])
 
     # Trust region.
     if not np.isinf(kappa):
@@ -296,6 +313,7 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
     path, sol_stats = optimize_bezier(L, U, durations, alpha, initial, final, **kwargs)
     cost = sol_stats['cost']
     cost_breakdown = sol_stats['cost_breakdown']
+    retiming_weights = sol_stats['retiming_weights']
 
     if verbose:
         init_log()
@@ -317,7 +335,7 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
 
         # Retime.
         new_durations, runtime, kappa_max = retiming(kappa, cost_breakdown,
-            durations, **kwargs)
+            durations, retiming_weights, **kwargs)
         durations_iter.append(new_durations)
         retiming_runtimes.append(runtime)
 
@@ -325,7 +343,6 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
         path_new, sol_stats = optimize_bezier(L, U, new_durations,
             alpha, initial, final, **kwargs)
         cost_new = sol_stats['cost']
-        cost_breakdown_new = sol_stats['cost_breakdown']
         costs.append(cost_new)
         paths.append(path_new)
         bez_runtimes.append(sol_stats['runtime'])
@@ -340,7 +357,8 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
             durations = new_durations
             path = path_new
             cost = cost_new
-            cost_breakdown = cost_breakdown_new
+            cost_breakdown = sol_stats['cost_breakdown']
+            retiming_weights = sol_stats['retiming_weights']
 
         if kappa < kappa_min:
             break
