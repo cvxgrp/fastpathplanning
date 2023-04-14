@@ -8,7 +8,7 @@ class SafeSet:
     def __init__(self, L, U, verbose=True):
 
         if verbose:
-            print(f'Preprocessing started.')
+            print(f'Preprocessing phase:')
 
         assert L.shape == U.shape
         boxes = [Box(l, u) for l, u in zip(L, U)]
@@ -22,14 +22,14 @@ class SafeSet:
 def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
 
     if verbose:
-        print('Polygonal phase started.')
+        print('Polygonal phase:')
 
     discrete_planner, runtime = S.G.shortest_path(p_term)
     box_seq, length, runtime = discrete_planner(p_init)
     box_seq, traj, length, solver_time = iterative_planner(S.B, p_init, p_term, box_seq, verbose)
 
     if verbose:
-        print('\nSmooth phase started.')
+        print('\nSmooth phase:')
 
     # Fix box sequence.
     L = np.array([S.B.boxes[i].l for i in box_seq])

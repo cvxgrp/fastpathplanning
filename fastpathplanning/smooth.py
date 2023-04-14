@@ -268,6 +268,26 @@ def retiming(kappa, costs, durations, **kwargs):
 
     return new_durations, prob.solver_stats.solve_time, kappa_max
 
+def log(s1, size=10):
+    s1 = str(s1)
+    s0 = list('|' + ' ' * size + '|')
+    s0[2:2 + len(s1)] = s1
+    return ''.join(s0)
+
+def init_log():
+    print(log('Iter.') + log('Cost') + log('Decr.') + \
+          log('Kappa') + log('Accept'))
+    print('-' * 60)
+
+def term_log():
+    print('-' * 60)
+
+def update_log(i, cost, cost_decrease, kappa, accept):
+    print(log(i) + \
+              log('{:.2e}'.format(cost)) + \
+              log('{:.1e}'.format(cost_decrease)) + \
+              log('{:.1e}'.format(kappa)) + \
+              log(accept))
 
 def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
     omega=3, kappa_min=1e-2, verbose=False, **kwargs):
@@ -278,7 +298,8 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
     cost_breakdown = sol_stats['cost_breakdown']
 
     if verbose:
-        print(f'Iter. 0: cost {np.round(cost, 3)}.')
+        init_log()
+        update_log(0, cost, np.nan, np.inf, True)
 
     # Lists to populate.
     costs = [cost]
@@ -308,11 +329,14 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
         costs.append(cost_new)
         paths.append(path_new)
         bez_runtimes.append(sol_stats['runtime'])
+
+        decr = cost_new - cost
+        accept = decr < 0
         if verbose:
-            print(f'Iter. {i}, cost {np.round(cost_new, 3)}, kappa {kappa}.')
+            update_log(i, cost_new, decr, kappa, accept)
 
         # If retiming improved the trajectory.
-        if cost_new < cost:
+        if accept:
             durations = new_durations
             path = path_new
             cost = cost_new
@@ -325,9 +349,10 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
 
     runtime = sum(bez_runtimes) + sum(retiming_runtimes)
     if verbose:
-        print(f'Terminated in {i} iterations.')
-        print(f'Final cost is {np.round(cost, 3)}.')
-        print(f'Solver time was {np.round(runtime, 5)}.')
+        term_log()
+        print(f'Smooth phase terminated in {i} iterations')
+        print(f'Final cost is ' + '{:.3e}'.format(cost))
+        print(f'Solver time was {np.round(runtime, 5)}')
 
     # Solution statistics.
     sol_stats = {}

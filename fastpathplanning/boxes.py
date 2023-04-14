@@ -68,7 +68,7 @@ class BoxCollection:
         self.d = boxes[0].d
 
         if verbose:
-            print(f'Computing interesctions of {self.n} boxes in {self.d} dimensions...')
+            print(f'Computing interesctions of {self.n} boxes in {self.d} dimensions')
 
         self.ls = np.vstack([box.l for box in boxes]).T
         self.us = np.vstack([box.u for box in boxes]).T

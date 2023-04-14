@@ -10,7 +10,7 @@ class LineGraph(nx.Graph):
     def __init__(self, B, verbose=True, *args, **kwargs):
 
         if verbose:
-            print('Computing line graph...')
+            print('Computing line graph')
 
         # Initialize and store boxes.
         super().__init__(*args, **kwargs)
@@ -33,7 +33,7 @@ class LineGraph(nx.Graph):
                 f'and {self.number_of_edges()} edges.')
 
         if verbose:
-            print('Optimizing representative points...')
+            print('Optimizing representative points')
 
         # Pair each vertex with the corresponding box intersection.
         for v in self.nodes:

@@ -25,7 +25,26 @@ def solve_min_distance(B, box_seq, start, goal):
 
     return traj, length, solver_time
 
+def log(s1, size=10):
+    s1 = str(s1)
+    s0 = list('|' + ' ' * size + '|')
+    s0[2:2 + len(s1)] = s1
+    return ''.join(s0)
+
+def init_log():
+    print(log('Iter.') + log('Length') + log('N boxes'))
+    print('-' * 36)
+
+def term_log():
+    print('-' * 36)
+
+def update_log(i, length, n_boxes):
+    print(log(i) + log('{:.2e}'.format(length)) + log(n_boxes))
+
 def iterative_planner(B, start, goal, box_seq, verbose=True, tol=1e-5, **kwargs):
+
+    if verbose:
+        init_log()
 
     box_seq = np.array(box_seq)
     solver_time = 0
@@ -38,8 +57,7 @@ def iterative_planner(B, start, goal, box_seq, verbose=True, tol=1e-5, **kwargs)
         solver_time += solver_time_i
 
         if verbose:
-            print(f'Iter. {n_iters}: curve length {np.round(length, 3)}, '\
-                  f'number of boxes {len(box_seq)}.')
+            update_log(n_iters, length, len(box_seq))
 
         box_seq, traj = merge_overlaps(box_seq, traj, tol)
 
@@ -76,9 +94,10 @@ def iterative_planner(B, start, goal, box_seq, verbose=True, tol=1e-5, **kwargs)
             box_seq = np.insert(box_seq, insert_k, insert_i)
         else:
             if verbose:
-                print(f'Terminated in {n_iters} iterations.')
-                print(f'Final length is {np.round(length, 3)}.')
-                print(f'Solver time was {np.round(solver_time, 5)}.')
+                term_log()
+                print(f'Polygonal phase terminated in {n_iters} iterations')
+                print(f'Final length is ' + '{:.3e}'.format(length))
+                print(f'Solver time was {np.round(solver_time, 5)}')
             return list(box_seq), traj, length, solver_time
 
 def merge_overlaps(box_seq, traj, tol):
