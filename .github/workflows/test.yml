@@ -83,5 +83,5 @@ jobs:
           conda install anaconda-client
           conda config --set anaconda_upload no
           git fetch --prune --unshallow --tags
-          VERSION_FROM_GIT_TAG=$(git tag --list "v*[0-9]" --sort=version:refname | tail -1 | cut -c 2-) conda build --git-url https://github.com/cvxgrp/fastpathplanning.git --git-branch ${GITHUB_REF##*/} -c stanfordcvxgrp -c conda-forge --numpy 1.22.2
+          VERSION_FROM_GIT_TAG=$(git tag --list "v*[0-9]" --sort=version:refname | tail -1 | cut -c 2-) conda build . -c stanfordcvxgrp -c conda-forge --numpy 1.22.2
           
