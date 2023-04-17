@@ -5,9 +5,9 @@ on:
 jobs:
   deploy-pypi:
     runs-on: ubuntu-latest
-      env:
-        PYPI_USERNAME: ${{ secrets.PYPI_USERNAME }}
-        PYPI_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+    env:
+      PYPI_USERNAME: ${{ secrets.PYPI_USERNAME }}
+      PYPI_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
