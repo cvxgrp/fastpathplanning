@@ -1,0 +1,45 @@
+{% set name = "fastpathplanning" %}
+
+package:
+  name: "{{ name|lower }}"
+  version: {{ environ.get('VERSION_FROM_GIT_TAG') }}
+
+source:
+  git_url: https://github.com/cvxgrp/fastpathplanning
+
+build:
+  noarch: python
+  number: 0
+  script: "{{ PYTHON }} -m pip install . --ignore-installed -vv "
+
+requirements:
+  host:
+    - pip
+    - python >=3.8
+    - numpy >=1.17.5
+    - scipy
+    - networkx
+    - cvxpy
+
+  run:
+    - pip
+    - python >=3.8
+    - numpy >=1.17.5
+    - scipy
+    - networkx
+    - cvxpy
+
+about:
+  home: https://github.com/cvxgrp/fastpathplanning
+  license: APACHEv2
+  license_family: Apache
+  license_file:
+  summary: An algorithm for path planning in sequences of safe boxes.
+  doc_url:
+  dev_url:
+
+extra:
+  recipe-maintainers:
+    - Parth Nobel
+    - Tobia Marcucci
+    - Stanford-CVX-group
