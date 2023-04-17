@@ -34,7 +34,7 @@ about:
   license: APACHEv2
   license_family: Apache
   license_file:
-  summary: This package enables tractable evaluation of Stein's Unbiased Risk Estimate on convexly regularized estimators.
+  summary: An algorithm for path planning in sequences of safe boxes.
   doc_url:
   dev_url:
 

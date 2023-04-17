@@ -12,11 +12,9 @@ jobs:
 
           - name: Install Python
             uses: actions/setup-python@v3
-            with:
-              python-version: "3.8"
 
           - name: Install Twine
-            run: sudo pip install twine
+            run: sudo pip install twine wheel
 
           - name: Create the distribution
             run: |
@@ -38,8 +36,6 @@ jobs:
 
           - name: Install Python
             uses: actions/setup-python@v3
-            with:
-              python-version: "3.8"
 
           - name: Install Miniconda
             uses: conda-incubator/setup-miniconda@v2
@@ -69,4 +65,4 @@ jobs:
           - name: Upload the Anaconda Package
             id: condaload
             run: |
-              anaconda upload -u stanfordcvxgrp  /usr/share/miniconda3/conda-bld/noarch/sure-cr-${{ steps.condabuild.outputs.gitversion }}-*.tar.bz2
+              anaconda upload -u stanfordcvxgrp  /usr/share/miniconda3/conda-bld/noarch/fastpathplanning-${{ steps.condabuild.outputs.gitversion }}-*.tar.bz2
