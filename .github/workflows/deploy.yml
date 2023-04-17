@@ -34,8 +34,6 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-        with:
-          token: ${{ secrets.ACCESS_TOKEN }}
 
       - name: Install Python
         uses: actions/setup-python@v3
