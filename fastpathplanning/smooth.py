@@ -268,7 +268,7 @@ def retiming(kappa, costs, durations, retiming_weights, **kwargs):
     # Retiming weights.
     for k in range(n_boxes - 1):
         for i, w in retiming_weights[k].items():
-            cost -= retiming_weights[k][i] * i * (eta[k] - eta[k + 1])
+            cost += i * retiming_weights[k][i] * (eta[k + 1] - eta[k])
 
     # Trust region.
     if not np.isinf(kappa):
@@ -327,7 +327,7 @@ def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
     retiming_runtimes = []
 
     # Iterate retiming and Bezier.
-    kappa = np.inf
+    kappa = 1
     n_iters = 0
     i = 1
     while True:
