@@ -54,22 +54,22 @@ jobs:
 # echo yes before login to prevent anaconda bug breaking automation
 # git tags MUST be fetched otherwise output will be blank
 # bash variables cannot be used in github actions, must use actions specific syntax and methods
-    - name: Build the Anaconda Package
-      id: condabuild
-      env:
-        ANACONDA_USERNAME: ${{ secrets.ANACONDA_CLOUD_USERNAME }}
-        ANACONDA_PASSWORD: ${{ secrets.ANACONDA_CLOUD_PASSWORD }}
-      run: |
-        conda install anaconda-client
-        conda config --set anaconda_upload no
-        echo yes | anaconda login --username $ANACONDA_USERNAME --password $ANACONDA_PASSWORD
-        git fetch --prune --unshallow --tags
-        VERSION_FROM_GIT_TAG=$(git tag --list "v*[0-9]" --sort=version:refname | tail -1 | cut -c 2-) conda build . -c stanfordcvxgrp -c conda-forge --numpy 1.22.2
-        echo "GIT_VERSION=${{ git tag --list 'v*[0-9]' --sort=version:refname | tail -1 | cut -c 2- }}" >> $GITHUB_ENV
-    - name: Upload the Anaconda Package
-      id: condaload
-      env:
-        ANACONDA_USERNAME: ${{ secrets.ANACONDA_CLOUD_USERNAME }}
-        ANACONDA_PASSWORD: ${{ secrets.ANACONDA_CLOUD_PASSWORD }}
-      run: |
-        anaconda upload -u stanfordcvxgrp /usr/share/miniconda3/conda-bld/noarch/fastpathplanning-${{ env.GIT_VERSION }}-*.tar.bz2
+      - name: Build the Anaconda Package
+        id: condabuild
+        env:
+          ANACONDA_USERNAME: ${{ secrets.ANACONDA_CLOUD_USERNAME }}
+          ANACONDA_PASSWORD: ${{ secrets.ANACONDA_CLOUD_PASSWORD }}
+        run: |
+          conda install anaconda-client
+          conda config --set anaconda_upload no
+          echo yes | anaconda login --username $ANACONDA_USERNAME --password $ANACONDA_PASSWORD
+          git fetch --prune --unshallow --tags
+          VERSION_FROM_GIT_TAG=$(git tag --list "v*[0-9]" --sort=version:refname | tail -1 | cut -c 2-) conda build . -c stanfordcvxgrp -c conda-forge --numpy 1.22.2
+          echo "GIT_VERSION=${{ git tag --list 'v*[0-9]' --sort=version:refname | tail -1 | cut -c 2- }}" >> $GITHUB_ENV
+      - name: Upload the Anaconda Package
+        id: condaload
+        env:
+          ANACONDA_USERNAME: ${{ secrets.ANACONDA_CLOUD_USERNAME }}
+          ANACONDA_PASSWORD: ${{ secrets.ANACONDA_CLOUD_PASSWORD }}
+        run: |
+          anaconda upload -u stanfordcvxgrp /usr/share/miniconda3/conda-bld/noarch/fastpathplanning-${{ env.GIT_VERSION }}-*.tar.bz2
