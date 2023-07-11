@@ -26,6 +26,9 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
 
     discrete_planner, runtime = S.G.shortest_path(p_term)
     box_seq, length, runtime = discrete_planner(p_init)
+    if box_seq is None:
+        print('Infeasible problem, initial and terminal points are disconnected.')
+        return
     box_seq, traj, length, solver_time = iterative_planner(S.B, p_init, p_term, box_seq, verbose)
 
     if verbose:
