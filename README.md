@@ -5,6 +5,12 @@
 Library companion to the paper "Fast Path PlanningThrough Large Collections of
 Safe Boxes" by Tobia Marcucci, Parth Nobel, Russ Tedrake, and Stephen Boyd.
 
+fastpathplanning has the following dependencies:
+- `numpy`
+- `cvxpy >= 1.3`
+- `networkx`
+- `scipy`
+- `clarabel`
 
-- Depends on cvxpy, networkx, scipy, numpy
-  - Optional: matplotlib
+fastpathplanning uses `matplotlib` for plotting.
+This dependency is optional.
