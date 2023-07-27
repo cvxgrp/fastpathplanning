@@ -10,6 +10,8 @@ class SafeSet:
         if verbose:
             print(f'Preprocessing phase:')
 
+        L = np.array(L)
+        U = np.array(U)
         assert L.shape == U.shape
         boxes = [Box(l, u) for l, u in zip(L, U)]
         self.B = BoxCollection(boxes, verbose)

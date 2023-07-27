@@ -12,5 +12,6 @@ Safe Boxes](https://web.stanford.edu/~boyd/papers/pdf/fpp.pdf)" by Tobia Marcucc
 - `scipy`
 - `clarabel`
 
-`fastpathplanning` uses `matplotlib` for plotting.
-This dependency is optional.
+These dependencies are optional:
+- `matplotlib` (for plotting)
+- `meshcat` (for 3D visualizations)
