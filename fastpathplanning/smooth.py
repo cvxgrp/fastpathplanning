@@ -128,9 +128,9 @@ class CompositeBezierCurve:
 
         return CompositeBezierCurve([b.derivative() for b in self.beziers])
 
-    def bound_on_integral(self, f):
+    def l2_squared(self):
 
-        return sum(bez.bound_on_integral(f) for bez in self.beziers)
+        return sum(bez.l2_squared() for bez in self.beziers)
 
     def plot2d(self, **kwargs):
 
@@ -200,15 +200,16 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
 
         # Cost function.
         for i, ai in alpha.items():
-            h = n_points - 1 - i
-            A = np.zeros((h + 1, h + 1))
-            for m in range(h + 1):
-                for n in range(h + 1):
-                    A[m, n] = binom(h, m) * binom(h, n) / binom(2 * h, m + n)
-            A *= durations[k] / (2 * h + 1)
-            A = np.kron(A, np.eye(d))
-            p = cp.vec(points[k][i], order='C')
-            cost += ai * cp.quad_form(p, A)
+            if ai > 0:
+                h = n_points - 1 - i
+                A = np.zeros((h + 1, h + 1))
+                for m in range(h + 1):
+                    for n in range(h + 1):
+                        A[m, n] = binom(h, m) * binom(h, n) / binom(2 * h, m + n)
+                A *= durations[k] / (2 * h + 1)
+                A = np.kron(A, np.eye(d))
+                p = cp.vec(points[k][i], order='C')
+                cost += ai * cp.quad_form(p, A)
 
     # Solve problem.
     prob = cp.Problem(cp.Minimize(cost), constraints)
@@ -223,67 +224,99 @@ def optimize_bezier(L, U, durations, alpha, initial, final,
         a = b
     path = CompositeBezierCurve(beziers)
 
-    retiming_weights = {}
-    for k in range(n_boxes - 1):
-        retiming_weights[k] = {}
-        for i in range(1, D + 1):
-            primal = points[k][i][-1].value
-            dual = continuity[k][i].dual_value
-            retiming_weights[k][i] = primal.dot(dual)
-
-    # Reconstruct costs.
-    cost_breakdown = {}
-    for k in range(n_boxes):
-        cost_breakdown[k] = {}
-        bez = beziers[k]
-        for i in range(1, D + 1):
-            bez = bez.derivative()
-            if i in alpha:
-                cost_breakdown[k][i] = alpha[i] * bez.l2_squared()
-
     # Solution statistics.
     sol_stats = {}
     sol_stats['cost'] = prob.value
     sol_stats['runtime'] = prob.solver_stats.solve_time
-    sol_stats['cost_breakdown'] = cost_breakdown
-    sol_stats['retiming_weights'] = retiming_weights
+
+    # Optimal values of the control points.
+    sol_stats['points'] = {}
+    for k in range(n_boxes):
+        sol_stats['points'][k] = {}
+        for i in range(D + 1):
+            sol_stats['points'][k][i] = points[k][i].value
 
     return path, sol_stats
 
 
-def retiming(kappa, costs, durations, retiming_weights, **kwargs):
+def retiming(L, U, nom_durations, alpha, initial, final, nom_points, kappa):
 
-    # Decision variables.
-    n_boxes = max(costs) + 1
-    eta = cp.Variable(n_boxes)
-    eta.value = np.ones(n_boxes)
-    constr = [durations @ eta == sum(durations)]
+    # Problem size.
+    n_boxes, d = L.shape
+    D = max(alpha)
+    n_points = (D + 1) * 2
 
-    # Scale costs from previous trajectory.
+    # Durations.
+    durations = cp.Variable(n_boxes)
+    constraints = [sum(durations) == sum(nom_durations)]
+    for k in range(n_boxes):
+        constraints.append(durations[k] >= nom_durations[k] / (1 + kappa))
+        constraints.append(durations[k] <= nom_durations[k] * (1 + kappa))
+
+    # Control points of the curves and their derivatives.
+    points = {}
+    for k in range(n_boxes):
+        points[k] = {}
+        for i in range(D + 1):
+            size = (n_points - i, d)
+            points[k][i] = cp.Variable(size)
+    
+    # Boundary conditions.
+    for i, value in initial.items():
+        constraints.append(points[0][i][0] == value)
+    for i, value in final.items():
+        constraints.append(points[n_boxes - 1][i][-1] == value)
+
+    # Loop through boxes.
     cost = 0
-    for i, ci in costs.items():
-        for j, cij in ci.items():
-            cost += cij * cp.power(eta[i], 1 - 2 * j)
+    continuity = {}
+    for k in range(n_boxes):
+        continuity[k] = {}
 
-    # Retiming weights.
-    for k in range(n_boxes - 1):
-        for i, w in retiming_weights[k].items():
-            cost += i * retiming_weights[k][i] * (eta[k + 1] - eta[k])
+        # Box containment.
+        Lk = np.array([L[k]] * n_points)
+        Uk = np.array([U[k]] * n_points)
+        constraints.append(points[k][0] >= Lk)
+        constraints.append(points[k][0] <= Uk)
 
-    # Trust region.
-    if not np.isinf(kappa):
-        constr.append(eta[1:] - eta[:-1] <= kappa)
-        constr.append(eta[:-1] - eta[1:] <= kappa)
-        
-    # Solve SOCP and get new durarations.
-    prob = cp.Problem(cp.Minimize(cost), constr)
+        # Bezier dynamics.
+        for i in range(D):
+            ci = 1 / (n_points - i - 1)
+            linearization = - nom_durations[k] * nom_points[k][i + 1] \
+                            + durations[k] * nom_points[k][i + 1] \
+                            + nom_durations[k] * points[k][i + 1]
+            constraints.append(points[k][i][1:] - points[k][i][:-1] == ci * linearization)
+
+        # Continuity and differentiability.
+        if k < n_boxes - 1:
+            for i in range(D + 1):
+                constraints.append(points[k][i][-1] == points[k + 1][i][0])
+
+        # Cost function.
+        for i, ai in alpha.items():
+            if ai > 0:
+                h = n_points - 1 - i
+                A = np.zeros((h + 1, h + 1))
+                for m in range(h + 1):
+                    for n in range(h + 1):
+                        A[m, n] = binom(h, m) * binom(h, n) / binom(2 * h, m + n)
+                A *= ai / (2 * h + 1)
+                A_chol = np.linalg.cholesky(A).T
+                A_chol = np.kron(A_chol, np.eye(d))
+                p = cp.vec(points[k][i - 1][1:] - points[k][i - 1][:-1], order='C') * (n_points - i)
+                cost += cp.quad_over_lin(A_chol @ p, durations[k])
+
+    # Solve problem.
+    prob = cp.Problem(cp.Minimize(cost), constraints)
     prob.solve(solver='CLARABEL')
-    new_durations = np.multiply(eta.value, durations)
 
-    # New candidate for kappa.
-    kappa_max = max(np.abs(eta.value[1:] - eta.value[:-1]))
+    new_durations = durations.value
+    kappa_1 = max(np.divide(new_durations, nom_durations) - 1)
+    kappa_2 = max(np.divide(nom_durations, new_durations) - 1)
+    kappa_max = max(kappa_1, kappa_2)
 
-    return new_durations, prob.solver_stats.solve_time, kappa_max
+    return new_durations, prob.solver_stats.solve_time, kappa_max, prob.value
+
 
 def log(s1, size=10):
     s1 = str(s1)
@@ -307,80 +340,70 @@ def update_log(i, cost, cost_decrease, kappa, accept):
               log(accept))
 
 def optimize_bezier_with_retiming(L, U, durations, alpha, initial, final,
-    omega=3, kappa_min=1e-2, verbose=False, **kwargs):
+    omega=3, kappa_min=1e-2, cost_tol=1e-2, verbose=False, **kwargs):
 
     # Solve initial Bezier problem.
     path, sol_stats = optimize_bezier(L, U, durations, alpha, initial, final, **kwargs)
     cost = sol_stats['cost']
-    cost_breakdown = sol_stats['cost_breakdown']
-    retiming_weights = sol_stats['retiming_weights']
+    points = sol_stats['points']
 
     if verbose:
         init_log()
         update_log(0, cost, np.nan, np.inf, True)
 
     # Lists to populate.
-    costs = [cost]
-    paths = [path]
-    durations_iter = [durations]
     bez_runtimes = [sol_stats['runtime']]
     retiming_runtimes = []
 
     # Iterate retiming and Bezier.
     kappa = 1
     n_iters = 0
-    i = 1
     while True:
         n_iters += 1
-
+        
         # Retime.
-        new_durations, runtime, kappa_max = retiming(kappa, cost_breakdown,
-            durations, retiming_weights, **kwargs)
-        durations_iter.append(new_durations)
+        new_durations, runtime, kappa_max, retiming_cost = retiming(L, U, durations, alpha,
+            initial, final, points, kappa, **kwargs)
         retiming_runtimes.append(runtime)
 
         # Improve Bezier curves.
-        path_new, sol_stats = optimize_bezier(L, U, new_durations,
-            alpha, initial, final, **kwargs)
-        cost_new = sol_stats['cost']
-        costs.append(cost_new)
-        paths.append(path_new)
+        new_path, sol_stats = optimize_bezier(L, U, new_durations, alpha,
+            initial, final, **kwargs)
+        new_cost = sol_stats['cost']
+        new_points = sol_stats['points']
         bez_runtimes.append(sol_stats['runtime'])
 
-        decr = cost_new - cost
+        decr = new_cost - cost
         accept = decr < 0
         if verbose:
-            update_log(i, cost_new, decr, kappa, accept)
+            update_log(n_iters, new_cost, decr, kappa, accept)
 
         # If retiming improved the trajectory.
         if accept:
             durations = new_durations
-            path = path_new
-            cost = cost_new
-            cost_breakdown = sol_stats['cost_breakdown']
-            retiming_weights = sol_stats['retiming_weights']
-
+            path = new_path
+            cost = new_cost
+            points = new_points
         if kappa < kappa_min:
             break
+        perc_cost = np.abs(new_cost - retiming_cost) / new_cost
+        if perc_cost < cost_tol:
+            break
         kappa = kappa_max / omega
-        i += 1
-
+        
     runtime = sum(bez_runtimes) + sum(retiming_runtimes)
     if verbose:
         term_log()
-        print(f'Smooth phase terminated in {i} iterations')
-        print(f'Final cost is ' + '{:.3e}'.format(cost))
-        print(f'Solver time was {np.round(runtime, 5)}')
+        print(f'Smooth phase terminated in {n_iters} iterations')
+        print('Final cost is {:.3e}'.format(cost))
+        print('Solver time was {:.1e}s'.format(runtime))
 
     # Solution statistics.
     sol_stats = {}
     sol_stats['cost'] = cost
     sol_stats['n_iters'] = n_iters
-    sol_stats['costs'] = costs
-    sol_stats['paths'] = paths
-    sol_stats['durations_iter'] = durations_iter
     sol_stats['bez_runtimes'] = bez_runtimes
     sol_stats['retiming_runtimes'] = retiming_runtimes
     sol_stats['runtime'] = runtime
-    
+
     return path, sol_stats
