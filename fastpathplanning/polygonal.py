@@ -96,8 +96,8 @@ def iterative_planner(B, start, goal, box_seq, verbose=True, tol=1e-5, **kwargs)
             if verbose:
                 term_log()
                 print(f'Polygonal phase terminated in {n_iters} iterations')
-                print(f'Final length is ' + '{:.3e}'.format(length))
-                print(f'Solver time was {np.round(solver_time, 5)}')
+                print('Final length is {:.3e}'.format(length))
+                print('Solver time was {:.1e}s'.format(solver_time))
             return list(box_seq), traj, length, solver_time
 
 def merge_overlaps(box_seq, traj, tol):

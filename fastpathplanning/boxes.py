@@ -93,7 +93,7 @@ class BoxCollection:
 
         if verbose:
             n_inters = int(sum(len(v) for v in self.inters.values()) / 2)
-            print(f'...found {n_inters} intersections.')
+            print(f'...found {n_inters} intersections')
 
     def contain(self, x, tol=0, subset=...):
 

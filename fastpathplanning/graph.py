@@ -30,7 +30,7 @@ class LineGraph(nx.Graph):
 
         if verbose:
             print(f'...line graph has {self.number_of_nodes()} vertices ' \
-                f'and {self.number_of_edges()} edges.')
+                f'and {self.number_of_edges()} edges')
 
         if verbose:
             print('Optimizing representative points')
@@ -42,7 +42,7 @@ class LineGraph(nx.Graph):
             self.nodes[v]['box'] = boxk.intersect(boxl)
 
         # Place representative point in each box intersection.
-        self.optimize_points()
+        runtime = self.optimize_points()
 
         # Assign fixed length to each edge of the line graph.
         for e in self.edges:
@@ -54,7 +54,7 @@ class LineGraph(nx.Graph):
         self.adj_mat = nx.to_scipy_sparse_array(self)
 
         if verbose:
-            print('...representative points optimized.')
+            print('...solver time was {:.1e}s'.format(runtime))
         
     def optimize_points(self):
 
@@ -74,6 +74,8 @@ class LineGraph(nx.Graph):
 
         for i, v in enumerate(self.nodes):
             self.nodes[v]['point'] = x[i].value
+
+        return prob.solver_stats.solve_time
 
     @staticmethod
     def node(k, l):
