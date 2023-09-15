@@ -30,11 +30,10 @@ class Log:
               self.write('{:.1e}'.format(kappa)) + \
               self.write(accept))
 
-    def terminate(self, n_iters, cost, runtime):
+    def terminate(self, n_iters, cost):
         print('-' * self.size)
         print(f'Smooth phase terminated in {n_iters} iterations')
         print('Final cost is {:.3e}'.format(cost))
-        print('Solver time was {:.1e}s'.format(runtime))
 
 def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, verbose=False, n_points=None):
 
@@ -46,19 +45,17 @@ def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, v
 
     # Initialize optimization problem.
     T = sum(best_durations)
-    problem = problem_skeleton(L, U, alpha, initial, final, T, n_points)
+    problem, cvxpy_time = problem_skeleton(L, U, alpha, initial, final, T, n_points)
 
     # Solve initial Bezier problem.
     path, sol_stats = optimize_shape(problem, best_durations)
+    cvxpy_time += sol_stats['cvxpy_time']
     best_cost = sol_stats['cost']
     best_points = sol_stats['points']
 
     if verbose:
         log = Log()
         log.update(0, best_cost, np.nan, np.inf, True)
-
-    bez_runtime = sol_stats['runtime']
-    retiming_runtime = 0
 
     # Iterate retiming and Bezier.
     n_iters = 0
@@ -68,13 +65,13 @@ def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, v
         # Retime.
         new_durations, kappa_max, sol_stats = optimize_shape_and_timing(problem,
             best_points, best_durations, kappa)
-        retiming_runtime += sol_stats['runtime']
+        cvxpy_time += sol_stats['cvxpy_time']
         retiming_cost = sol_stats['cost']
 
         # Improve Bezier curves.
         new_path, sol_stats = optimize_shape(problem, new_durations)
+        cvxpy_time += sol_stats['cvxpy_time']
         new_cost = sol_stats['cost']
-        bez_runtime += sol_stats['runtime']
 
         decr = new_cost - best_cost
         accept = decr < 0
@@ -94,21 +91,19 @@ def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, v
             break
         kappa = kappa_max / omega
         
-    runtime = bez_runtime + retiming_runtime
     if verbose:
-        log.terminate(n_iters, best_cost, runtime)
+        log.terminate(n_iters, best_cost)
 
     # Solution statistics.
     sol_stats = {}
     sol_stats['cost'] = best_cost
     sol_stats['n_iters'] = n_iters
-    sol_stats['bez_runtime'] = bez_runtime
-    sol_stats['retiming_runtime'] = retiming_runtime
-    sol_stats['runtime'] = runtime
+    sol_stats['cvxpy_time'] = cvxpy_time
 
     return path, sol_stats
 
 def problem_skeleton(L, U, alpha, initial, final, T, n_points=None):
+    tic = time()
 
     # Problem size.
     assert L.shape == U.shape
@@ -172,9 +167,12 @@ def problem_skeleton(L, U, alpha, initial, final, T, n_points=None):
     problem['point_constraints'] = point_constraints
     problem['duration_constraints'] = duration_constraints
 
-    return problem
+    cvxpy_time = time() - tic
+
+    return problem, cvxpy_time
 
 def optimize_shape(problem, nom_durations):
+    tic = time()
 
     points = problem['points']
     costs = problem['point_costs']
@@ -208,8 +206,6 @@ def optimize_shape(problem, nom_durations):
 
     # Solution statistics.
     sol_stats = {}
-    sol_stats['cost'] = prob.value
-    sol_stats['runtime'] = prob.solver_stats.solve_time
 
     # Optimal values of the control points.
     sol_stats['points'] = {}
@@ -218,9 +214,13 @@ def optimize_shape(problem, nom_durations):
         for i, points_ji in points_j.items():
             sol_stats['points'][j][i] = points_ji.value
 
+    sol_stats['cost'] = prob.value
+    sol_stats['cvxpy_time'] = time() - tic - prob.solver_stats.solve_time
+
     return path, sol_stats
 
 def optimize_shape_and_timing(problem, nom_points, nom_durations, kappa):
+    tic = time()
 
     points = problem['points']
     durations = problem['durations']
@@ -257,6 +257,6 @@ def optimize_shape_and_timing(problem, nom_points, nom_durations, kappa):
     # Solution statistics.
     sol_stats = {}
     sol_stats['cost'] = prob.value
-    sol_stats['runtime'] = prob.solver_stats.solve_time
+    sol_stats['cvxpy_time'] = time() - tic - prob.solver_stats.solve_time
 
     return new_durations, kappa_max, sol_stats

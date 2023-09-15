@@ -1,4 +1,5 @@
 import numpy as np
+from time import time
 from fastpathplanning.boxes import Box, BoxCollection
 from fastpathplanning.polygonal import iterative_planner
 from fastpathplanning.smooth import optimize_bezier_with_retiming
@@ -6,6 +7,7 @@ from fastpathplanning.smooth import optimize_bezier_with_retiming
 class SafeSet:
 
     def __init__(self, L, U, verbose=True):
+        tic = time()
 
         if verbose:
             print(f'Preprocessing phase:')
@@ -17,12 +19,20 @@ class SafeSet:
         self.B = BoxCollection(boxes, verbose)
         self.G = self.B.line_graph(verbose)
 
+        self.runtime = time() - tic
+        self.cvxpy_time = self.G.cvxpy_time
+
+        if verbose:
+            print('Preprocessing terminated in {:.1e}s'.format(self.runtime))
+            print('CVXPY time was {:.1e}s'.format(self.cvxpy_time))
+
     def plot2d(self, **kwargs):
 
         self.B.plot2d(**kwargs)
 
 def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
 
+    tic = time()
     if verbose:
         print('Polygonal phase:')
 
@@ -31,10 +41,14 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
     if box_seq is None:
         print('Infeasible problem, initial and terminal points are disconnected.')
         return
-    box_seq, traj, length, solver_time = iterative_planner(S.B, p_init, p_term, box_seq, verbose)
+    box_seq, traj, length, cvxpy_time = iterative_planner(S.B, p_init, p_term, box_seq, verbose)
 
+    polygonal_time = time() - tic
     if verbose:
+        print('Polygonal phase terminated in {:.1e}s'.format(polygonal_time))
+        print('CVXPY time was {:.1e}s'.format(cvxpy_time))
         print('\nSmooth phase:')
+    tic = time()
 
     # Fix box sequence.
     L = np.array([S.B.boxes[i].l for i in box_seq])
@@ -52,5 +66,12 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
     durations *= T / sum(durations)
 
     path, sol_stats = optimize_bezier_with_retiming(L, U, durations, alpha, initial, final, verbose=True)
+
+    smooth_time = time() - tic
+    cvxpy_time = sol_stats['cvxpy_time']
+    if verbose:
+        print('Smooth phase terminated in {:.1e}s'.format(smooth_time))
+        print('CVXPY time was {:.1e}s'.format(cvxpy_time))
+        print(smooth_time - cvxpy_time)
 
     return path

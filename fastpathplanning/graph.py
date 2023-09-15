@@ -42,7 +42,7 @@ class LineGraph(nx.Graph):
             self.nodes[v]['box'] = boxk.intersect(boxl)
 
         # Place representative point in each box intersection.
-        runtime = self.optimize_points()
+        self.optimize_points()
 
         # Assign fixed length to each edge of the line graph.
         for e in self.edges:
@@ -54,9 +54,10 @@ class LineGraph(nx.Graph):
         self.adj_mat = nx.to_scipy_sparse_array(self)
 
         if verbose:
-            print('...solver time was {:.1e}s'.format(runtime))
+            print('...done')
         
     def optimize_points(self):
+        tic = time()
 
         x = cp.Variable((self.number_of_nodes(), self.B.d))
         x.value = np.array([self.nodes[v]['box'].c for v in self.nodes])
@@ -75,7 +76,7 @@ class LineGraph(nx.Graph):
         for i, v in enumerate(self.nodes):
             self.nodes[v]['point'] = x[i].value
 
-        return prob.solver_stats.solve_time
+        self.cvxpy_time = time() - tic - prob.solver_stats.solve_time
 
     @staticmethod
     def node(k, l):
