@@ -11,7 +11,7 @@ class Log:
     def __init__(self):
         print(self.write('Iter.') + \
               self.write('Cost') + \
-              self.write('Decr.') + \
+              self.write('% Decr.') + \
               self.write('Kappa') + \
               self.write('Accept'))
         self.size = 60
@@ -23,10 +23,12 @@ class Log:
         s0[2:2 + len(s)] = s
         return ''.join(s0)
 
-    def update(self, i, cost, cost_decrease, kappa, accept):
+    def update(self, i, cost, decr, kappa, accept):
+        if not np.isnan(decr):
+            decr =  - round(decr * 100)
         print(self.write(i) + \
               self.write('{:.2e}'.format(cost)) + \
-              self.write('{:.1e}'.format(cost_decrease)) + \
+              self.write(f'{decr}') + \
               self.write('{:.1e}'.format(kappa)) + \
               self.write(accept))
 
@@ -76,7 +78,7 @@ def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, v
         decr = new_cost - best_cost
         accept = decr < 0
         if verbose:
-            log.update(n_iters, new_cost, decr, kappa, accept)
+            log.update(n_iters, new_cost, decr / best_cost, kappa, accept)
 
         # If retiming improved the trajectory.
         if accept:
