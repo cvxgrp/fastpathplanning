@@ -64,6 +64,7 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
     # Initialize transition times.
     durations = np.linalg.norm(traj[1:] - traj[:-1], axis=1)
     durations *= T / sum(durations)
+    # durations = minimum_snap_times(traj, T)
 
     path, sol_stats = optimize_bezier_with_retiming(L, U, durations, alpha, initial, final, verbose=True)
 
@@ -72,6 +73,16 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
     if verbose:
         print('Smooth phase terminated in {:.1e}s'.format(smooth_time))
         print('CVXPY time was {:.1e}s'.format(cvxpy_time))
-        print(smooth_time - cvxpy_time)
 
     return path
+
+def minimum_snap_times(traj, T):
+    norms = np.linalg.norm(traj[1:] - traj[:-1], axis=1)
+    l1 = norms[0]
+    l2 = norms[-1]
+    d = sum(norms[1:-1])
+    v = (4 * (l1 + l2) + d) / T
+    durations = norms / v
+    durations[0] = 4 * l1 / v
+    durations[-1] = 4 * l2 / v
+    return durations
