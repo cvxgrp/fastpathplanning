@@ -57,12 +57,12 @@ def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, v
 
     if verbose:
         log = Log()
-        log.update(0, best_cost, np.nan, np.inf, True)
+        log.update(1, best_cost, np.nan, np.inf, True)
 
     # Iterate retiming and Bezier.
-    n_iters = 0
-    while True:
-        n_iters += 1
+    n_iters = 2
+    convergence = False
+    while not convergence:
         
         # Retime.
         new_durations, kappa_max, sol_stats = optimize_shape_and_timing(problem,
@@ -70,15 +70,19 @@ def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, v
         cvxpy_time += sol_stats['cvxpy_time']
         retiming_cost = sol_stats['cost']
 
+        # Convergence check.
+        perc_cost = np.abs(best_cost - retiming_cost) / best_cost
+        if perc_cost < cost_tol or kappa < kappa_min:
+            convergence = True
+
         # Improve Bezier curves.
         new_path, sol_stats = optimize_shape(problem, new_durations)
         cvxpy_time += sol_stats['cvxpy_time']
         new_cost = sol_stats['cost']
-
-        decr = new_cost - best_cost
+        decr = (new_cost - best_cost) / best_cost
         accept = decr < 0
         if verbose:
-            log.update(n_iters, new_cost, decr / best_cost, kappa, accept)
+            log.update(n_iters, new_cost, decr, kappa, accept)
 
         # If retiming improved the trajectory.
         if accept:
@@ -86,23 +90,18 @@ def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, v
             best_path = new_path
             best_cost = new_cost
             best_points = sol_stats['points']
-        if kappa < kappa_min:
-            break
-        perc_cost = np.abs(new_cost - retiming_cost) / new_cost
-        if perc_cost < cost_tol:
-            break
         kappa = kappa_max / omega
-        
-    if verbose:
-        log.terminate(n_iters, best_cost)
-
+        n_iters += 1
+ 
     # Solution statistics.
     sol_stats = {}
     sol_stats['cost'] = best_cost
     sol_stats['n_iters'] = n_iters
     sol_stats['cvxpy_time'] = cvxpy_time
+    if verbose:
+        log.terminate(n_iters, best_cost)
 
-    return path, sol_stats
+    return best_path, sol_stats
 
 def problem_skeleton(L, U, alpha, initial, final, T, n_points=None):
     tic = time()
@@ -231,9 +230,8 @@ def optimize_shape_and_timing(problem, nom_points, nom_durations, kappa):
 
     # Durations.
     additional_constraints = []
-    for duration, nom_duration in zip(durations, nom_durations):
-        additional_constraints.append(duration >= nom_duration / (1 + kappa))
-        additional_constraints.append(duration <= nom_duration * (1 + kappa))
+    additional_constraints.append(durations >= nom_durations / (1 + kappa))
+    additional_constraints.append(durations <= nom_durations * (1 + kappa))
 
     # Bezier dynamics.
     n_boxes = len(points)
@@ -252,9 +250,10 @@ def optimize_shape_and_timing(problem, nom_points, nom_durations, kappa):
     prob.solve(solver='CLARABEL')
 
     new_durations = durations.value
-    kappa_1 = max(np.divide(new_durations, nom_durations) - 1)
-    kappa_2 = max(np.divide(nom_durations, new_durations) - 1)
-    kappa_max = max(kappa_1, kappa_2)
+    ratios = np.divide(new_durations, nom_durations)
+    kappa_1 = max(ratios)
+    kappa_2 = min(ratios)
+    kappa_max = max(kappa_1, 1 / kappa_2) - 1
 
     # Solution statistics.
     sol_stats = {}

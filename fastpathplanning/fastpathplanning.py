@@ -22,6 +22,7 @@ class SafeSet:
         self.runtime = time() - tic
         self.cvxpy_time = self.G.cvxpy_time
 
+        # print(self.runtime - self.cvxpy_time)
         if verbose:
             print('Preprocessing terminated in {:.1e}s'.format(self.runtime))
             print('CVXPY time was {:.1e}s'.format(self.cvxpy_time))
@@ -30,7 +31,8 @@ class SafeSet:
 
         self.B.plot2d(**kwargs)
 
-def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
+def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True,
+    init_times=None):
 
     tic = time()
     if verbose:
@@ -44,6 +46,7 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
     box_seq, traj, length, cvxpy_time = iterative_planner(S.B, p_init, p_term, box_seq, verbose)
 
     polygonal_time = time() - tic
+    # print(polygonal_time - cvxpy_time)
     if verbose:
         print('Polygonal phase terminated in {:.1e}s'.format(polygonal_time))
         print('CVXPY time was {:.1e}s'.format(cvxpy_time))
@@ -54,35 +57,25 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True):
     L = np.array([S.B.boxes[i].l for i in box_seq])
     U = np.array([S.B.boxes[i].u for i in box_seq])
 
-    # Cost coefficients.
-    alpha = {i + 1: ai for i, ai in enumerate(alpha)}
-
     # Boundary conditions.
     initial = {0: p_init} | der_init
     final = {0: p_term} | der_term
 
     # Initialize transition times.
-    durations = np.linalg.norm(traj[1:] - traj[:-1], axis=1)
-    durations *= T / sum(durations)
-    # durations = minimum_snap_times(traj, T)
+    if init_times is not None:
+        durations = init_times(traj, T)
+    else:
+        durations = np.linalg.norm(traj[1:] - traj[:-1], axis=1)
+        durations *= T / sum(durations)
 
-    path, sol_stats = optimize_bezier_with_retiming(L, U, durations, alpha, initial, final, verbose=True)
+    alpha = {i + 1: ai for i, ai in enumerate(alpha)}
+    path, sol_stats = optimize_bezier_with_retiming(L, U, durations, alpha, initial, final, verbose)
 
     smooth_time = time() - tic
     cvxpy_time = sol_stats['cvxpy_time']
+    # print(smooth_time - cvxpy_time)
     if verbose:
         print('Smooth phase terminated in {:.1e}s'.format(smooth_time))
         print('CVXPY time was {:.1e}s'.format(cvxpy_time))
 
     return path
-
-def minimum_snap_times(traj, T):
-    norms = np.linalg.norm(traj[1:] - traj[:-1], axis=1)
-    l1 = norms[0]
-    l2 = norms[-1]
-    d = sum(norms[1:-1])
-    v = (4 * (l1 + l2) + d) / T
-    durations = norms / v
-    durations[0] = 4 * l1 / v
-    durations[-1] = 4 * l2 / v
-    return durations
