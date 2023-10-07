@@ -36,8 +36,12 @@ def solve_min_distance(B, box_seq, start, goal):
     x = cp.Variable((len(box_seq) + 1, B.d))
 
     boxes = [B.boxes[i] for i in box_seq]
-    l = np.array([np.maximum(b.l, c.l) for b, c in zip(boxes[:-1], boxes[1:])])
-    u = np.array([np.minimum(b.u, c.u) for b, c in zip(boxes[:-1], boxes[1:])])
+    l1 = np.array([b.l for b in boxes[:-1]])
+    u1 = np.array([b.u for b in boxes[:-1]])
+    l2 = np.array([b.l for b in boxes[1:]])
+    u2 = np.array([b.u for b in boxes[1:]])
+    l = np.maximum(l1, l2)
+    u = np.minimum(u1, u2)
 
     cost = cp.sum(cp.norm(x[1:] - x[:-1], 2, axis=1))
     constr = [x[0] == start, x[1:-1] >= l, x[1:-1] <= u, x[-1] == goal]

@@ -2,7 +2,7 @@ import numpy as np
 from time import time
 from fastpathplanning.boxes import Box, BoxCollection
 from fastpathplanning.polygonal import iterative_planner
-from fastpathplanning.smooth import optimize_bezier_with_retiming
+from fastpathplanning.smooth import seq_conv_prog
 
 class SafeSet:
 
@@ -69,10 +69,9 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True,
         durations *= T / sum(durations)
 
     alpha = {i + 1: ai for i, ai in enumerate(alpha)}
-    path, sol_stats = optimize_bezier_with_retiming(L, U, durations, alpha, initial, final, verbose)
+    path, cvxpy_time = seq_conv_prog(L, U, durations, alpha, initial, final, verbose)
 
     smooth_time = time() - tic
-    cvxpy_time = sol_stats['cvxpy_time']
     # print(smooth_time - cvxpy_time)
     if verbose:
         print('Smooth phase terminated in {:.1e}s'.format(smooth_time))
