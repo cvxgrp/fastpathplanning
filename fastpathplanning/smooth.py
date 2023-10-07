@@ -32,232 +32,272 @@ class Log:
               self.write('{:.1e}'.format(kappa)) + \
               self.write(accept))
 
-    def terminate(self, n_iters, cost):
+    def terminate(self, cost, perc_cost, cost_tol):
         print('-' * self.size)
-        print(f'Smooth phase terminated in {n_iters} iterations')
+        if perc_cost < cost_tol:
+            print('Expected cost decrease is {:.1e}'.format(perc_cost))
+            print('...smaller than tolerance {:.1e}'.format(cost_tol))
         print('Final cost is {:.3e}'.format(cost))
 
-def optimize_bezier_with_retiming(L, U, best_durations, alpha, initial, final, verbose=False, n_points=None):
+def seq_conv_prog(L, U, trav_times, alpha, initial, final, verbose=False):
+
+    # Check inputs.
+    assert L.shape == U.shape
+    assert max(initial) < max(alpha)
+    assert max(final) < max(alpha)
 
     # Algorithm parameters.
     kappa = 1
     omega = 3
-    kappa_min = 1e-2
     cost_tol = 1e-2
-
-    # Initialize optimization problem.
-    T = sum(best_durations)
-    problem, cvxpy_time = problem_skeleton(L, U, alpha, initial, final, T, n_points)
+    
+    # Initialize optimization problems.
+    T = sum(trav_times)
+    projection_step, cvxpy_time_proj = projection_problem(L, U, alpha, initial, final)
+    tangent_step, cvxpy_time_tan = tangent_problem(L, U, alpha, initial, final, T)
+    cvxpy_time = cvxpy_time_proj + cvxpy_time_tan
 
     # Solve initial Bezier problem.
-    path, sol_stats = optimize_shape(problem, best_durations)
-    cvxpy_time += sol_stats['cvxpy_time']
-    best_cost = sol_stats['cost']
-    best_points = sol_stats['points']
-
+    best_trav_times = trav_times
+    best_path, best_cost, best_points, cvxpy_time_proj = projection_step(best_trav_times)
+    cvxpy_time += cvxpy_time_proj
+    n_iters = 1
     if verbose:
         log = Log()
-        log.update(1, best_cost, np.nan, np.inf, True)
+        log.update(n_iters, best_cost, np.nan, np.nan, True)
 
     # Iterate retiming and Bezier.
-    n_iters = 2
     convergence = False
+    perc_cost = np.inf
     while not convergence:
-        
-        # Retime.
-        new_durations, kappa_max, sol_stats = optimize_shape_and_timing(problem,
-            best_points, best_durations, kappa)
-        cvxpy_time += sol_stats['cvxpy_time']
-        retiming_cost = sol_stats['cost']
 
-        # Convergence check.
-        perc_cost = np.abs(best_cost - retiming_cost) / best_cost
-        if perc_cost < cost_tol or kappa < kappa_min:
+        # Tangent step.
+        new_trav_times, tangent_cost, kappa_max, cvxpy_time_tan = tangent_step(kappa, best_trav_times, best_points)
+        perc_cost = (best_cost - tangent_cost) / best_cost
+        if perc_cost < cost_tol:
             convergence = True
 
-        # Improve Bezier curves.
-        new_path, sol_stats = optimize_shape(problem, new_durations)
-        cvxpy_time += sol_stats['cvxpy_time']
-        new_cost = sol_stats['cost']
-        decr = (new_cost - best_cost) / best_cost
+        # Projection step.
+        new_path, new_cost, new_points, cvxpy_time_proj = projection_step(new_trav_times)
+        cvxpy_time += cvxpy_time_tan + cvxpy_time_proj
+        n_iters += 1
+        
+        # If tangent step improved the trajectory.
+        decr = new_cost - best_cost
         accept = decr < 0
         if verbose:
-            log.update(n_iters, new_cost, decr, kappa, accept)
-
-        # If retiming improved the trajectory.
+            log.update(n_iters, new_cost, decr / best_cost, kappa, accept)
         if accept:
-            best_durations = new_durations
+            best_trav_times = new_trav_times
             best_path = new_path
             best_cost = new_cost
-            best_points = sol_stats['points']
+            best_points = new_points
         kappa = kappa_max / omega
-        n_iters += 1
  
-    # Solution statistics.
-    sol_stats = {}
-    sol_stats['cost'] = best_cost
-    sol_stats['n_iters'] = n_iters
-    sol_stats['cvxpy_time'] = cvxpy_time
     if verbose:
-        log.terminate(n_iters, best_cost)
+        log.terminate(best_cost, perc_cost, cost_tol)
 
-    return best_path, sol_stats
+    return best_path, cvxpy_time
 
-def problem_skeleton(L, U, alpha, initial, final, T, n_points=None):
+def control_points(dimension, D, n_boxes, n_points, type=cp.Variable):
+
+    points = []
+    for j in range(n_boxes):
+        points_j = []
+        for i in range(D + 1):
+            points_j.append(type((n_points - i, dimension)))
+        points.append(points_j)
+
+    return points
+
+def boundary_conditions(points, initial, final):
+
+    constraints = []
+    for i, value in initial.items():
+        constraints.append(points[0][i][0] == value)
+    for i, value in final.items():
+        constraints.append(points[-1][i][-1] == value)
+
+    return constraints
+
+def box_containment(points, L, U):
+
+    constraints = []
+    for j, points_j in enumerate(points):
+        n_points = points_j[0].shape[0]
+        Lj = np.array([L[j]] * n_points)
+        Uj = np.array([U[j]] * n_points)
+        constraints.append(points_j[0] >= Lj)
+        constraints.append(points_j[0] <= Uj)
+
+    return constraints
+
+def differentiability(points):
+
+    constraints = []
+    for points_jp1, points_j in zip(points[1:], points[:-1]):
+        for points_jp1_i, points_j_i in zip(points_jp1, points_j):
+            constraints.append(points_j_i[-1] == points_jp1_i[0])
+
+    return constraints
+
+def get_path(points, trav_times):
+
+    beziers = []
+    a = 0
+    for j, points_j in enumerate(points):
+        b = a + trav_times[j]
+        beziers.append(BezierCurve(points_j[0].value, a, b))
+        a = b
+
+    return CompositeBezierCurve(beziers)
+
+def get_points(points):
+
+    opt_points = []
+    for points_j in points:
+        opt_points_j = []
+        for points_ji in points_j:
+            opt_points_j.append(points_ji.value)
+        opt_points.append(opt_points_j)
+
+    return opt_points
+
+def projection_problem(L, U, alpha, initial, final):
+
+    # Start clock.
     tic = time()
 
     # Problem size.
-    assert L.shape == U.shape
     n_boxes, d = L.shape
     D = max(alpha)
-    assert max(initial) <= D
-    assert max(final) <= D
-    if n_points is None:
-        n_points = (D + 1) * 2
+    n_points = (D + 1) * 2
 
-    # Durations.
-    durations = cp.Variable(n_boxes)
-    duration_constraints = [sum(durations) == T]
+    # Variables.
+    points = control_points(d, D, n_boxes, n_points)
 
-    # Control points of the curves and their derivatives.
-    points = {}
+    # Parameters.
+    trav_times = cp.Parameter(n_boxes, pos=True)
+
+    # Constraints.
+    constraints = boundary_conditions(points, initial, final)
+    constraints += box_containment(points, L, U)
+    constraints += differentiability(points)
+
+    # Bezier dynamics.
     for j in range(n_boxes):
-        points[j] = {}
-        for i in range(D + 1):
-            size = (n_points - i, d)
-            points[j][i] = cp.Variable(size)
-    
-    # Boundary conditions.
-    point_constraints = []
-    for i, value in initial.items():
-        point_constraints.append(points[0][i][0] == value)
-    for i, value in final.items():
-        point_constraints.append(points[n_boxes - 1][i][-1] == value)
-
-    # Box containment.
-    for j in range(n_boxes):
-        Lj = np.array([L[j]] * n_points)
-        Uj = np.array([U[j]] * n_points)
-        point_constraints.append(points[j][0] >= Lj)
-        point_constraints.append(points[j][0] <= Uj)
-
-    # Continuity and differentiability.
-    for j in range(n_boxes):
-        if j < n_boxes - 1:
-            for i in range(D + 1):
-                point_constraints.append(points[j][i][-1] == points[j + 1][i][0])
+        for i in range(D):
+            ci = trav_times[j] / (n_points - i - 1)
+            constraints.append(points[j][i][1:] - points[j][i][:-1] == ci * points[j][i + 1])
 
     # Cost function.
-    point_costs = [0 for j in range(n_boxes)]
-    duration_cost = 0
+    cost = 0
+    for i, ai in alpha.items():
+        if ai > 0:
+            A = ai * l2_matrix(n_points - i - 1, d)
+            for j in range(n_boxes):
+                p = cp.vec(points[j][i], order='C')
+                cost += trav_times[j] * cp.quad_form(p, A)
+
+    # Construct problem.
+    prob = cp.Problem(cp.Minimize(cost), constraints)
+    assert prob.is_dcp(dpp=True)
+
+    def projection_step(trav_times_val):
+
+        # Solve problem.
+        tic = time()
+        trav_times.value = trav_times_val
+        prob.solve(solver='CLARABEL', ignore_dpp=True)
+        path = get_path(points, trav_times_val)
+        opt_points = get_points(points)
+        cvxpy_time = time() - tic - prob.solver_stats.solve_time
+
+        return path, prob.value, opt_points, cvxpy_time
+
+    cvxpy_time = time() - tic
+
+    return projection_step, cvxpy_time
+
+def tangent_problem(L, U, alpha, initial, final, T):
+
+    # Start clock.
+    tic = time()
+
+    # Problem size.
+    n_boxes, d = L.shape
+    D = max(alpha)
+    n_points = (D + 1) * 2
+
+    # Variables.
+    points = control_points(d, D, n_boxes, n_points)
+
+    # Parameters.
+    trust_region = cp.Parameter(pos=True)
+    trust_region_inv = cp.Parameter(pos=True)
+    nom_trav_times = cp.Parameter(n_boxes, pos=True)
+    nom_points = control_points(d, D, n_boxes, n_points, cp.Parameter)
+    nom_points_scaled = control_points(d, D, n_boxes, n_points, cp.Parameter)
+
+    # Constraints.
+    constraints = boundary_conditions(points, initial, final)
+    constraints += box_containment(points, L, U)
+    constraints += differentiability(points)
+
+    # Traversal times.
+    trav_times = cp.Variable(n_boxes)
+    constraints.append(sum(trav_times) == T)
+    constraints.append(trav_times * trust_region >= nom_trav_times)
+    constraints.append(trav_times * trust_region_inv <= nom_trav_times)
+
+    # Bezier dynamics.
+    for j in range(n_boxes):
+        for i in range(D):
+            ci = 1 / (n_points - i - 1)
+            lin = trav_times[j] * nom_points[j][i + 1] \
+                  + nom_trav_times[j] * points[j][i + 1] \
+                  - nom_points_scaled[j][i + 1]
+            point_diff = points[j][i][1:] - points[j][i][:-1]
+            constraints.append(point_diff == ci * lin)
+
+    # Cost function.
+    cost = 0
     for i, ai in alpha.items():
         if ai > 0:
             A = ai * l2_matrix(n_points - i - 1, d)
             A_chol = np.linalg.cholesky(A).T
             for j in range(n_boxes):
-                p = cp.vec(points[j][i], order='C')
-                point_costs[j] += cp.quad_form(p, A)
-                p = cp.vec(points[j][i - 1][1:] - points[j][i - 1][:-1], order='C') * (n_points - i)
-                duration_cost += cp.quad_over_lin(A_chol @ p, durations[j])
+                point_diff = points[j][i - 1][1:] - points[j][i - 1][:-1]
+                p = cp.vec(point_diff, order='C') * (n_points - i)
+                cost += cp.quad_over_lin(A_chol @ p, trav_times[j])
 
-    problem = {}
-    problem['points'] = points
-    problem['durations'] = durations
-    problem['point_costs'] = point_costs
-    problem['duration_cost'] = duration_cost
-    problem['point_constraints'] = point_constraints
-    problem['duration_constraints'] = duration_constraints
+    # Construct problem.
+    prob = cp.Problem(cp.Minimize(cost), constraints)
+    assert prob.is_dcp(dpp=True)
+
+    def tangent_step(kappa, trav_times_val, points_val):
+
+        # Start clock.
+        tic = time()
+
+        # Solve problem.
+        trust_region.value = 1 + kappa
+        trust_region_inv.value = 1 / trust_region.value
+        nom_trav_times.value = trav_times_val
+        for j in range(n_boxes):
+            for i in range(D + 1):
+                nom_points[j][i].value = points_val[j][i]
+                nom_points_scaled[j][i].value = points_val[j][i] * trav_times_val[j]
+        prob.solve(solver='CLARABEL', ignore_dpp=True)
+
+        # Trust region update.
+        opt_trav_times = trav_times.value
+        ratios = np.divide(opt_trav_times, trav_times_val)
+        kappa_max = max(max(ratios), 1 / min(ratios)) - 1
+        cvxpy_time = time() - tic - prob.solver_stats.solve_time
+
+        return opt_trav_times, prob.value, kappa_max, cvxpy_time
 
     cvxpy_time = time() - tic
 
-    return problem, cvxpy_time
-
-def optimize_shape(problem, nom_durations):
-    tic = time()
-
-    points = problem['points']
-    costs = problem['point_costs']
-    constraints = problem['point_constraints']
-
-    # Bezier dynamics.
-    n_boxes = len(points)
-    n_points = points[0][0].shape[0]
-    D = len(points[0]) - 1
-    additional_constraints = []
-    for j in range(n_boxes):
-        for i in range(D):
-            ci = nom_durations[j] / (n_points - i - 1)
-            additional_constraints.append(points[j][i][1:] - points[j][i][:-1] == ci * points[j][i + 1])
-
-    # Cost function.
-    cost = sum([costs[j] * nom_durations[j] for j in range(n_boxes)])
-
-    # Solve problem.
-    prob = cp.Problem(cp.Minimize(cost), constraints + additional_constraints)
-    prob.solve(solver='CLARABEL')
-
-    # Reconstruct path.
-    beziers = []
-    a = 0
-    for j in range(len(points)):
-        b = a + nom_durations[j]
-        beziers.append(BezierCurve(points[j][0].value, a, b))
-        a = b
-    path = CompositeBezierCurve(beziers)
-
-    # Solution statistics.
-    sol_stats = {}
-
-    # Optimal values of the control points.
-    sol_stats['points'] = {}
-    for j, points_j in points.items():
-        sol_stats['points'][j] = {}
-        for i, points_ji in points_j.items():
-            sol_stats['points'][j][i] = points_ji.value
-
-    sol_stats['cost'] = prob.value
-    sol_stats['cvxpy_time'] = time() - tic - prob.solver_stats.solve_time
-
-    return path, sol_stats
-
-def optimize_shape_and_timing(problem, nom_points, nom_durations, kappa):
-    tic = time()
-
-    points = problem['points']
-    durations = problem['durations']
-    cost = problem['duration_cost']
-    constraints = problem['point_constraints'] + problem['duration_constraints']
-
-    # Durations.
-    additional_constraints = []
-    additional_constraints.append(durations >= nom_durations / (1 + kappa))
-    additional_constraints.append(durations <= nom_durations * (1 + kappa))
-
-    # Bezier dynamics.
-    n_boxes = len(points)
-    n_points = points[0][0].shape[0]
-    D = len(points[0]) - 1
-    for j in range(n_boxes):
-        for i in range(D):
-            ci = 1 / (n_points - i - 1)
-            linearization = - nom_durations[j] * nom_points[j][i + 1] \
-                            + durations[j] * nom_points[j][i + 1] \
-                            + nom_durations[j] * points[j][i + 1]
-            additional_constraints.append(points[j][i][1:] - points[j][i][:-1] == ci * linearization)
-
-    # Solve problem.
-    prob = cp.Problem(cp.Minimize(cost), constraints + additional_constraints)
-    prob.solve(solver='CLARABEL')
-
-    new_durations = durations.value
-    ratios = np.divide(new_durations, nom_durations)
-    kappa_1 = max(ratios)
-    kappa_2 = min(ratios)
-    kappa_max = max(kappa_1, 1 / kappa_2) - 1
-
-    # Solution statistics.
-    sol_stats = {}
-    sol_stats['cost'] = prob.value
-    sol_stats['cvxpy_time'] = time() - tic - prob.solver_stats.solve_time
-
-    return new_durations, kappa_max, sol_stats
+    return tangent_step, cvxpy_time
