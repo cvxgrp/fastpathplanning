@@ -76,4 +76,4 @@ def mixed_integer(L, U, alpha, p_init, p_term, T, N, der_init={}, der_term={},
         beziers.append(BezierCurve(points[j][0].value, a, b))
     path = CompositeBezierCurve(beziers)
 
-    return path
+    return path, prob.value, prob.solver_stats.solve_time
