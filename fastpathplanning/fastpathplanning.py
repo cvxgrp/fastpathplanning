@@ -22,7 +22,6 @@ class SafeSet:
         self.runtime = time() - tic
         self.cvxpy_time = self.G.cvxpy_time
 
-        # print(self.runtime - self.cvxpy_time)
         if verbose:
             print('Preprocessing terminated in {:.1e}s'.format(self.runtime))
             print('CVXPY time was {:.1e}s'.format(self.cvxpy_time))
@@ -46,7 +45,6 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True,
     box_seq, traj, length, cvxpy_time = iterative_planner(S.B, p_init, p_term, box_seq, verbose)
 
     polygonal_time = time() - tic
-    # print(polygonal_time - cvxpy_time)
     if verbose:
         print('Polygonal phase terminated in {:.1e}s'.format(polygonal_time))
         print('CVXPY time was {:.1e}s'.format(cvxpy_time))
@@ -63,16 +61,15 @@ def plan(S, p_init, p_term, T, alpha, der_init={}, der_term={}, verbose=True,
 
     # Initialize transition times.
     if init_times is not None:
-        durations = init_times(traj, T)
+        trav_times = init_times(traj, T)
     else:
-        durations = np.linalg.norm(traj[1:] - traj[:-1], axis=1)
-        durations *= T / sum(durations)
+        trav_times = np.linalg.norm(traj[1:] - traj[:-1], axis=1)
+        trav_times *= T / sum(trav_times)
 
     alpha = {i + 1: ai for i, ai in enumerate(alpha)}
-    path, cvxpy_time = seq_conv_prog(L, U, durations, alpha, initial, final, verbose)
+    path, cvxpy_time = seq_conv_prog(L, U, trav_times, alpha, initial, final, verbose)
 
     smooth_time = time() - tic
-    # print(smooth_time - cvxpy_time)
     if verbose:
         print('Smooth phase terminated in {:.1e}s'.format(smooth_time))
         print('CVXPY time was {:.1e}s'.format(cvxpy_time))
