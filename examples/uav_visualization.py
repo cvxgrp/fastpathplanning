@@ -222,7 +222,7 @@ class Village(EnvironmentVisualizer):
     def uav(self, name='uav', c=[0, 0, 0]):
         
         c = np.array(c, dtype=float)
-        size = np.array([.03, .03, .005])
+        size = np.array([.03, .03, .007])
 
         l = c - size
         u = c + size
