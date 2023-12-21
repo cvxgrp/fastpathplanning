@@ -146,9 +146,9 @@ class BoxCollection:
 
         return inters
 
-    def line_graph(self, verbose=True):
+    def line_graph(self, verbose=True, solver='CLARABEL'):
 
-        return LineGraph(self, verbose)
+        return LineGraph(self, verbose, solver)
 
     def plot2d(self, subset=None, label=None, frame_ratio=50, **kwargs):
         import matplotlib.pyplot as plt

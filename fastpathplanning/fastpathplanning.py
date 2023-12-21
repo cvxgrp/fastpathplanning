@@ -6,7 +6,7 @@ from fastpathplanning.smooth import seq_conv_prog
 
 class SafeSet:
 
-    def __init__(self, L, U, verbose=True):
+    def __init__(self, L, U, verbose=True, solver='CLARABEL'):
         tic = time()
 
         if verbose:
@@ -17,7 +17,7 @@ class SafeSet:
         assert L.shape == U.shape
         boxes = [Box(l, u) for l, u in zip(L, U)]
         self.B = BoxCollection(boxes, verbose)
-        self.G = self.B.line_graph(verbose)
+        self.G = self.B.line_graph(verbose, solver)
 
         self.runtime = time() - tic
         self.cvxpy_time = self.G.cvxpy_time

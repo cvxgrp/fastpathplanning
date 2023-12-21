@@ -7,7 +7,7 @@ from itertools import product
 
 class LineGraph(nx.Graph):
 
-    def __init__(self, B, verbose=True, *args, **kwargs):
+    def __init__(self, B, verbose=True, solver='CLARABEL', *args, **kwargs):
 
         if verbose:
             print('Computing line graph')
@@ -15,6 +15,7 @@ class LineGraph(nx.Graph):
         # Initialize and store boxes.
         super().__init__(*args, **kwargs)
         self.B = B
+        self.solver = solver
 
         # Compute line graph using networkx.
         inters_graph = nx.Graph()
@@ -71,7 +72,7 @@ class LineGraph(nx.Graph):
         cost = cp.sum(cp.norm(y, 2, axis=1))
 
         prob = cp.Problem(cp.Minimize(cost), constraints)
-        prob.solve(solver='CLARABEL')
+        prob.solve(solver=self.solver)
 
         for i, v in enumerate(self.nodes):
             self.nodes[v]['point'] = x[i].value
