@@ -9,7 +9,7 @@ Safe Boxes](https://web.stanford.edu/~boyd/papers/pdf/fpp.pdf)" by Tobia Marcucc
 - `numpy`
 - `cvxpy >= 1.3`
 - `networkx`
-- `scipy`
+- `scipy==1.11.3`
 - `clarabel`
 
 These dependencies are optional:
