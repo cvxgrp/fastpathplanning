@@ -7,9 +7,9 @@ Safe Boxes](https://web.stanford.edu/~boyd/papers/pdf/fpp.pdf)" by Tobia Marcucc
 
 `fastpathplanning` has the following dependencies:
 - `numpy`
-- `cvxpy >= 1.3`
+- `cvxpy>=1.3`
 - `networkx`
-- `scipy==1.11.3`
+- `scipy`
 - `clarabel`
 
 These dependencies are optional:
